@@ -178,4 +178,17 @@ export class LeakTracker {
       .slice(0, limit)
       .map(([leak, count]) => ({ leak, count, percentOfHands: this.totalDecisions ? (count / this.totalDecisions) * 100 : 0 }));
   }
+
+  toJSON(): { counts: Record<Leak, number>; totalDecisions: number } {
+    return { counts: { ...this.counts }, totalDecisions: this.totalDecisions };
+  }
+
+  static fromJSON(data: { counts: Record<Leak, number>; totalDecisions: number } | undefined): LeakTracker {
+    const tracker = new LeakTracker();
+    if (data) {
+      tracker.counts = { ...tracker.counts, ...data.counts };
+      tracker.totalDecisions = data.totalDecisions;
+    }
+    return tracker;
+  }
 }

@@ -4,6 +4,7 @@ import { useGame } from '../hooks/useGame';
 import { CardView } from './CardView';
 import { Seat } from './Seat';
 import { Chips } from './Chips';
+import { HandHistoryPanel } from './HandHistoryPanel';
 import { HAND_RANK_NAMES } from '../engine/evaluator';
 import type { ActionType } from '../engine/betting';
 
@@ -19,7 +20,7 @@ function seatPosition(index: number, total: number) {
 }
 
 export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void }) {
-  const { engine, potTotal, currentActorId, advice, handSummary, handNumber, leakTracker, humanAct, nextHand } =
+  const { engine, potTotal, currentActorId, advice, handSummary, handNumber, leakTracker, humanAct, nextHand, handHistory } =
     useGame(setup);
   const [raiseAmount, setRaiseAmount] = useState(0);
 
@@ -238,6 +239,8 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
           ))}
         </div>
       )}
+
+      <HandHistoryPanel history={handHistory} />
     </div>
   );
 }

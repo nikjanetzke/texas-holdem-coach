@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { HandEngine } from '../engine/game';
+import type { ActionLogEntry, HandPlayer, ShowdownResult } from '../engine/game';
+import type { Card } from '../engine/deck';
 import type { ActionType } from '../engine/betting';
 import { decideAIAction } from '../ai/decide';
 import { AI_ARCHETYPES } from '../ai/profiles';
 import type { AIProfile } from '../ai/profiles';
 import { classifyPosition, generateAdvice, LeakTracker, scoreDecision } from '../coach/coach';
-import type { CoachAdvice } from '../coach/coach';
+import type { CoachAdvice, Leak } from '../coach/coach';
+import { loadSession, saveSession } from '../persistence/storage';
 
 export interface SeatConfig {
   id: string;
@@ -27,7 +30,17 @@ export interface HandSummaryEntry {
   explanation: string;
 }
 
+export interface HandRecord {
+  handNumber: number;
+  dealerSeat: number;
+  players: { id: string; name: string; holeCards: Card[] }[];
+  communityCards: Card[];
+  actionLog: ActionLogEntry[];
+  showdownResult: ShowdownResult | null;
+}
+
 const ARCHETYPE_LIST = [AI_ARCHETYPES.tight, AI_ARCHETYPES.looseAggressive, AI_ARCHETYPES.callingStation];
+const MAX_HAND_HISTORY = 20;
 
 export function buildDefaultSeats(numPlayers: number): SeatConfig[] {
   const seats: SeatConfig[] = [{ id: 'human', name: 'You', isHuman: true }];
@@ -38,16 +51,36 @@ export function buildDefaultSeats(numPlayers: number): SeatConfig[] {
   return seats;
 }
 
+interface SavedSession {
+  stacks: Record<string, number>;
+  dealerSeat: number;
+  handNumber: number;
+  leakCounts: { counts: Record<Leak, number>; totalDecisions: number };
+  handHistory: HandRecord[];
+}
+
+function sessionKey(setup: GameSetup): string {
+  return setup.seats.map((s) => s.id).join(',');
+}
+
 export function useGame(setup: GameSetup) {
+  // Only restore a saved session if it matches the current set of seats.
+  const initialSaved = (() => {
+    const saved = loadSession<SavedSession & { seatKey: string }>();
+    if (saved && saved.seatKey === sessionKey(setup)) return saved;
+    return null;
+  })();
+
   const [stacks, setStacks] = useState<Record<string, number>>(
-    () => Object.fromEntries(setup.seats.map((s) => [s.id, setup.startingStack])),
+    () => initialSaved?.stacks ?? Object.fromEntries(setup.seats.map((s) => [s.id, setup.startingStack])),
   );
-  const [dealerSeat, setDealerSeat] = useState(0);
-  const [handNumber, setHandNumber] = useState(1);
+  const [dealerSeat, setDealerSeat] = useState(initialSaved?.dealerSeat ?? 0);
+  const [handNumber, setHandNumber] = useState(initialSaved?.handNumber ?? 1);
   const [engine, setEngine] = useState<HandEngine | null>(null);
   const [advice, setAdvice] = useState<CoachAdvice | null>(null);
   const [handSummary, setHandSummary] = useState<HandSummaryEntry[] | null>(null);
-  const leakTracker = useRef(new LeakTracker());
+  const [handHistory, setHandHistory] = useState<HandRecord[]>(initialSaved?.handHistory ?? []);
+  const leakTracker = useRef(LeakTracker.fromJSON(initialSaved?.leakCounts));
   const [, forceRender] = useState(0);
 
   const startHand = useCallback((dealer: number) => {
@@ -135,14 +168,42 @@ export function useGame(setup: GameSetup) {
     return () => clearTimeout(timer);
   }, [engine, potTotal, seatConfigById]);
 
-  // When a hand reaches showdown, settle stacks and build the review.
+  // When a hand reaches showdown, settle stacks and record history exactly once.
+  // This runs on every render (no dep array) because `engine` mutates in place and
+  // `forceRender` ticks don't change any dependency the effect could key off of —
+  // the settledEngineRef guard is what makes this idempotent.
+  const settledEngineRef = useRef<HandEngine | null>(null);
   useEffect(() => {
-    if (!engine || !engine.isHandOver() || handSummary) return;
+    if (!engine || !engine.isHandOver() || settledEngineRef.current === engine) return;
+    settledEngineRef.current = engine;
+
     const newStacks: Record<string, number> = {};
     for (const p of engine.players) newStacks[p.id] = p.stack;
     setStacks((prev) => ({ ...prev, ...newStacks }));
-    setHandSummary([]);
-  }, [engine, handSummary]);
+    setHandSummary((prev) => prev ?? []);
+
+    const record: HandRecord = {
+      handNumber,
+      dealerSeat,
+      players: engine.players.map((p: HandPlayer) => ({ id: p.id, name: p.name, holeCards: p.holeCards })),
+      communityCards: engine.communityCards,
+      actionLog: engine.actionLog,
+      showdownResult: engine.showdownResult,
+    };
+    setHandHistory((prev) => [record, ...prev].slice(0, MAX_HAND_HISTORY));
+  });
+
+  // Persist session state to localStorage whenever it changes meaningfully.
+  useEffect(() => {
+    saveSession<SavedSession & { seatKey: string }>({
+      seatKey: sessionKey(setup),
+      stacks,
+      dealerSeat,
+      handNumber,
+      leakCounts: leakTracker.current.toJSON(),
+      handHistory,
+    });
+  }, [setup, stacks, dealerSeat, handNumber, handHistory]);
 
   const humanAct = useCallback((type: ActionType, amount?: number) => {
     if (!engine || currentActorId !== 'human') return;
@@ -187,5 +248,6 @@ export function useGame(setup: GameSetup) {
     humanAct,
     nextHand,
     stacks,
+    handHistory,
   };
 }
