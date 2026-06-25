@@ -20,8 +20,20 @@ function seatPosition(index: number, total: number) {
 }
 
 export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void }) {
-  const { engine, potTotal, currentActorId, advice, handSummary, handNumber, leakTracker, humanAct, nextHand, handHistory } =
-    useGame(setup);
+  const {
+    engine,
+    potTotal,
+    currentActorId,
+    advice,
+    handSummary,
+    handNumber,
+    leakTracker,
+    humanAct,
+    nextHand,
+    handHistory,
+    coachEnabled,
+    setCoachEnabled,
+  } = useGame(setup);
   const [raiseAmount, setRaiseAmount] = useState(0);
 
   const validActions =
@@ -71,6 +83,15 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
           <span>
             Blinds {setup.smallBlind}/{setup.bigBlind}
           </span>
+          <button
+            onClick={() => setCoachEnabled((v) => !v)}
+            className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
+              coachEnabled ? 'bg-indigo-600 text-white hover:bg-indigo-500' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+            }`}
+            title="Leaks are still tracked in the background even when the coach panel is hidden."
+          >
+            Coach: {coachEnabled ? 'On' : 'Off'}
+          </button>
         </div>
         <span className="font-mono">Your stack: {human.stack}</span>
       </div>
@@ -132,7 +153,7 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
       </div>
 
       {/* Coach panel */}
-      {advice && currentActorId === 'human' && !isHandOver && (
+      {coachEnabled && advice && currentActorId === 'human' && !isHandOver && (
         <div className="animate-fade-up mt-4 rounded-xl border border-indigo-500/40 bg-indigo-950/40 p-3 text-sm text-slate-200">
           <div className="mb-2 flex flex-wrap items-center gap-2">
             <span className="rounded bg-indigo-600 px-2 py-0.5 text-xs font-bold uppercase tracking-wide">Coach</span>
@@ -206,7 +227,7 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
               <span className="font-semibold">{engine.players.find((p) => p.id === id)?.name}</span> won {amount}
             </div>
           ))}
-          {handSummary && handSummary.length > 0 && (
+          {coachEnabled && handSummary && handSummary.length > 0 && (
             <div className="mt-2 space-y-0.5 text-slate-300">
               {handSummary.map((s, i) => (
                 <div key={i}>
@@ -228,7 +249,7 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
       )}
 
       {/* Leaks */}
-      {leaks.length > 0 && (
+      {coachEnabled && leaks.length > 0 && (
         <div className="mt-4 rounded-xl border border-slate-800 bg-slate-900/50 p-3 text-xs text-slate-400">
           <div className="mb-1 font-semibold text-slate-300">Leaks to watch</div>
           {leaks.map((l) => (

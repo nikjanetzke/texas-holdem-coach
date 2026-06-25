@@ -57,7 +57,13 @@ interface SavedSession {
   handNumber: number;
   leakCounts: { counts: Record<Leak, number>; totalDecisions: number };
   handHistory: HandRecord[];
+  coachEnabled: boolean;
 }
+
+// Bots act after a random delay in this range so the table doesn't feel robotic
+// and a human player can't infer anything from a fixed AI response time.
+const BOT_DELAY_MIN_MS = 400;
+const BOT_DELAY_MAX_MS = 1600;
 
 function sessionKey(setup: GameSetup): string {
   return setup.seats.map((s) => s.id).join(',');
@@ -80,6 +86,7 @@ export function useGame(setup: GameSetup) {
   const [advice, setAdvice] = useState<CoachAdvice | null>(null);
   const [handSummary, setHandSummary] = useState<HandSummaryEntry[] | null>(null);
   const [handHistory, setHandHistory] = useState<HandRecord[]>(initialSaved?.handHistory ?? []);
+  const [coachEnabled, setCoachEnabled] = useState(initialSaved?.coachEnabled ?? true);
   const leakTracker = useRef(LeakTracker.fromJSON(initialSaved?.leakCounts));
   const [, forceRender] = useState(0);
 
@@ -163,7 +170,7 @@ export function useGame(setup: GameSetup) {
         engine.act(actorId, valid.types.includes('check') ? 'check' : 'fold');
       }
       forceRender((n) => n + 1);
-    }, 500);
+    }, BOT_DELAY_MIN_MS + Math.random() * (BOT_DELAY_MAX_MS - BOT_DELAY_MIN_MS));
 
     return () => clearTimeout(timer);
   }, [engine, potTotal, seatConfigById]);
@@ -202,8 +209,9 @@ export function useGame(setup: GameSetup) {
       handNumber,
       leakCounts: leakTracker.current.toJSON(),
       handHistory,
+      coachEnabled,
     });
-  }, [setup, stacks, dealerSeat, handNumber, handHistory]);
+  }, [setup, stacks, dealerSeat, handNumber, handHistory, coachEnabled]);
 
   const humanAct = useCallback((type: ActionType, amount?: number) => {
     if (!engine || currentActorId !== 'human') return;
@@ -249,5 +257,7 @@ export function useGame(setup: GameSetup) {
     nextHand,
     stacks,
     handHistory,
+    coachEnabled,
+    setCoachEnabled,
   };
 }
