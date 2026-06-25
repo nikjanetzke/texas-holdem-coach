@@ -84,6 +84,9 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
         </button>
         <div className="flex items-center gap-4">
           <span>Hand #{handNumber}</span>
+          {setup.scenarioName && (
+            <span className="rounded-full bg-purple-900/60 px-3 py-1 text-xs text-purple-200">{setup.scenarioName}</span>
+          )}
           <span className="rounded-full bg-slate-800 px-3 py-1 capitalize text-emerald-300">{engine.street}</span>
           <div className="flex items-center gap-2" title={nextLevel ? `Next: ${nextLevel.smallBlind}/${nextLevel.bigBlind}` : 'Top level reached'}>
             <span>

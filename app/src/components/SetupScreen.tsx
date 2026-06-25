@@ -2,8 +2,10 @@ import { useState } from 'react';
 import type { GameSetup } from '../hooks/useGame';
 import { buildDefaultSeats } from '../hooks/useGame';
 import { BLIND_SCHEDULES, DEFAULT_SCHEDULE_ID } from '../engine/blinds';
+import { SCENARIOS } from '../scenarios/scenarios';
 
 export function SetupScreen({ onStart }: { onStart: (setup: GameSetup) => void }) {
+  const [mode, setMode] = useState<'quick' | 'scenario'>('quick');
   const [numPlayers, setNumPlayers] = useState(6);
   const [startingStack, setStartingStack] = useState(1000);
   const [scheduleId, setScheduleId] = useState(DEFAULT_SCHEDULE_ID);
@@ -13,6 +15,71 @@ export function SetupScreen({ onStart }: { onStart: (setup: GameSetup) => void }
       <h1 className="text-2xl font-bold mb-1">Texas Hold'em Coach</h1>
       <p className="text-slate-400 mb-6">Practice hands and get plain-English coaching as you play.</p>
 
+      <div className="mb-6 flex rounded-lg bg-slate-800 p-1">
+        <ModeTab label="Quick game" active={mode === 'quick'} onClick={() => setMode('quick')} />
+        <ModeTab label="Scenario" active={mode === 'scenario'} onClick={() => setMode('scenario')} />
+      </div>
+
+      {mode === 'scenario' ? (
+        <div className="space-y-2">
+          {SCENARIOS.map((s) => (
+            <button
+              key={s.id}
+              onClick={() => onStart(s.build())}
+              className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-left transition-colors hover:border-emerald-500 hover:bg-slate-700"
+            >
+              <div className="font-semibold">{s.name}</div>
+              <div className="text-xs text-slate-400">{s.description}</div>
+            </button>
+          ))}
+        </div>
+      ) : (
+        <QuickGameForm
+          numPlayers={numPlayers}
+          setNumPlayers={setNumPlayers}
+          startingStack={startingStack}
+          setStartingStack={setStartingStack}
+          scheduleId={scheduleId}
+          setScheduleId={setScheduleId}
+          onStart={onStart}
+        />
+      )}
+    </div>
+  );
+}
+
+function ModeTab({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`flex-1 rounded-md px-3 py-1.5 text-sm font-semibold transition-colors ${
+        active ? 'bg-emerald-600 text-white' : 'text-slate-300 hover:text-white'
+      }`}
+    >
+      {label}
+    </button>
+  );
+}
+
+function QuickGameForm({
+  numPlayers,
+  setNumPlayers,
+  startingStack,
+  setStartingStack,
+  scheduleId,
+  setScheduleId,
+  onStart,
+}: {
+  numPlayers: number;
+  setNumPlayers: (n: number) => void;
+  startingStack: number;
+  setStartingStack: (n: number) => void;
+  scheduleId: string;
+  setScheduleId: (id: string) => void;
+  onStart: (setup: GameSetup) => void;
+}) {
+  return (
+    <>
       <label className="block mb-4">
         <span className="block text-sm text-slate-300 mb-1">Number of players (2-10)</span>
         <input
@@ -76,6 +143,6 @@ export function SetupScreen({ onStart }: { onStart: (setup: GameSetup) => void }
       >
         Start playing
       </button>
-    </div>
+    </>
   );
 }

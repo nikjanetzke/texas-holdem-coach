@@ -40,8 +40,10 @@ export function shuffle<T>(items: T[], rng: () => number = Math.random): T[] {
 
 export class Shoe {
   private cards: Card[];
+  private rng: () => number;
 
   constructor(rng: () => number = Math.random) {
+    this.rng = rng;
     this.cards = shuffle(makeDeck(), rng);
   }
 
@@ -53,5 +55,10 @@ export class Shoe {
 
   remaining(): number {
     return this.cards.length;
+  }
+
+  /** Re-shuffles a fresh full deck, advancing the rng sequence so each reset differs. */
+  reset(): void {
+    this.cards = shuffle(makeDeck(), this.rng);
   }
 }

@@ -1,5 +1,7 @@
 import type { Card } from './deck';
 import { Shoe } from './deck';
+import { bandFor, chenScore } from './preflop';
+import type { LuckBand } from './preflop';
 import type { HandValue } from './evaluator';
 import { compareHandValues, evaluateBestHand } from './evaluator';
 import type { ActionType, Pot } from './betting';
@@ -38,6 +40,8 @@ export interface HandEngineOptions {
   smallBlind: number;
   bigBlind: number;
   ante?: number;
+  // Bias one player's starting hand into a strength band (card-luck practice).
+  holeCardBias?: { playerId: string; band: LuckBand };
   rng?: () => number;
 }
 
@@ -60,6 +64,7 @@ export class HandEngine {
   smallBlindId: string | null = null;
   bigBlindId: string | null = null;
   private shoe: Shoe;
+  private holeCardBias?: { playerId: string; band: LuckBand };
 
   constructor(options: HandEngineOptions) {
     this.players = options.players.map((p) => ({
@@ -76,6 +81,7 @@ export class HandEngine {
     this.bigBlind = options.bigBlind;
     this.ante = options.ante ?? 0;
     this.minRaise = options.bigBlind;
+    this.holeCardBias = options.holeCardBias;
     this.shoe = new Shoe(options.rng);
     this.dealAndPostBlinds();
   }
@@ -99,11 +105,7 @@ export class HandEngine {
 
   private dealAndPostBlinds(): void {
     const active = this.activeSeats();
-    for (let i = 0; i < 2; i++) {
-      for (const seat of active) {
-        this.players[seat].holeCards.push(this.shoe.draw());
-      }
-    }
+    this.dealHoleCards(active);
 
     // Antes are dead money: they go to the pot (totalContributed) but do not count
     // toward matching the current bet (streetContributed stays untouched).
@@ -152,6 +154,29 @@ export class HandEngine {
       active.length === 2
         ? this.players[this.nextSeat(this.dealerSeat)].id
         : this.players[this.nextSeat(this.nextSeat(this.dealerSeat))].id;
+  }
+
+  private dealHoleCards(active: number[]): void {
+    const bias = this.holeCardBias;
+    const target = bias ? active.find((seat) => this.players[seat].id === bias.playerId) : undefined;
+    const band = bias ? bandFor(bias.band) : null;
+    const MAX_ATTEMPTS = 300;
+
+    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+      for (const seat of active) this.players[seat].holeCards = [];
+      for (let i = 0; i < 2; i++) {
+        for (const seat of active) {
+          this.players[seat].holeCards.push(this.shoe.draw());
+        }
+      }
+      // No bias, or no biased seat in this hand: accept the first deal.
+      if (!band || target === undefined) return;
+      const score = chenScore(this.players[target].holeCards);
+      if (score >= band.min && score <= band.max) return;
+      // Out of band: reshuffle and try again.
+      this.shoe.reset();
+    }
+    // Fell through after max attempts — keep whatever was last dealt.
   }
 
   private postBlind(seat: number, amount: number): void {

@@ -11,18 +11,22 @@ import type { CoachAdvice, Leak } from '../coach/coach';
 import { loadSession, saveSession } from '../persistence/storage';
 import { BLIND_SCHEDULES, DEFAULT_SCHEDULE_ID, levelAt } from '../engine/blinds';
 import type { BlindLevel } from '../engine/blinds';
+import type { LuckBand } from '../engine/preflop';
 
 export interface SeatConfig {
   id: string;
   name: string;
   isHuman: boolean;
   profile?: AIProfile;
+  stack?: number; // overrides startingStack for this seat (scenarios)
 }
 
 export interface GameSetup {
   seats: SeatConfig[];
   startingStack: number;
   scheduleId: string;
+  cardLuck?: LuckBand; // bias the human's starting hands (scenarios)
+  scenarioName?: string;
 }
 
 export interface HandSummaryEntry {
@@ -92,7 +96,7 @@ export function useGame(setup: GameSetup) {
   })();
 
   const [stacks, setStacks] = useState<Record<string, number>>(
-    () => initialSaved?.stacks ?? Object.fromEntries(setup.seats.map((s) => [s.id, setup.startingStack])),
+    () => initialSaved?.stacks ?? Object.fromEntries(setup.seats.map((s) => [s.id, s.stack ?? setup.startingStack])),
   );
   const [dealerSeat, setDealerSeat] = useState(initialSaved?.dealerSeat ?? 0);
   const [handNumber, setHandNumber] = useState(initialSaved?.handNumber ?? 1);
@@ -139,6 +143,7 @@ export function useGame(setup: GameSetup) {
       smallBlind: level.smallBlind,
       bigBlind: level.bigBlind,
       ante: level.ante,
+      holeCardBias: setup.cardLuck && setup.cardLuck !== 'normal' ? { playerId: 'human', band: setup.cardLuck } : undefined,
     });
     setEngine(newEngine);
     setHandSummary(null);
