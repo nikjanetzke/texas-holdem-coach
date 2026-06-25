@@ -1,1 +1,96 @@
 @import "tailwindcss";
+
+@layer base {
+  body {
+    margin: 0;
+    background: #0a0f1a;
+  }
+}
+
+/* --- Animations --- */
+@keyframes dealIn {
+  from {
+    opacity: 0;
+    transform: translateY(-12px) scale(0.85);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes flipIn {
+  from {
+    transform: rotateY(90deg);
+    opacity: 0;
+  }
+  to {
+    transform: rotateY(0deg);
+    opacity: 1;
+  }
+}
+
+@keyframes potPulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.06);
+  }
+}
+
+@keyframes winnerGlow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 2px rgba(250, 204, 21, 0.9), 0 0 18px 4px rgba(250, 204, 21, 0.45);
+  }
+  50% {
+    box-shadow: 0 0 0 2px rgba(250, 204, 21, 1), 0 0 28px 8px rgba(250, 204, 21, 0.7);
+  }
+}
+
+@keyframes chipPop {
+  from {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-deal {
+  animation: dealIn 0.35s ease-out both;
+}
+.animate-flip {
+  animation: flipIn 0.4s ease-out both;
+}
+.animate-pot {
+  animation: potPulse 1.8s ease-in-out infinite;
+}
+.animate-winner {
+  animation: winnerGlow 1.2s ease-in-out infinite;
+}
+.animate-chip {
+  animation: chipPop 0.25s ease-out both;
+}
+.animate-fade-up {
+  animation: fadeUp 0.3s ease-out both;
+}
+
+.ring-acting {
+  box-shadow: 0 0 0 2px rgba(250, 204, 21, 0.9), 0 0 14px 2px rgba(250, 204, 21, 0.35);
+}
