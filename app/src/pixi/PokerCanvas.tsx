@@ -1,0 +1,244 @@
+import { useEffect, useRef } from 'react';
+import { Application, Container, Graphics, Text, TextStyle } from 'pixi.js';
+import type { Card } from '../engine/deck';
+import type { HandPlayer } from '../engine/game';
+import * as theme from './theme';
+import { drawAvatar, drawBadge, drawCardBack, drawCardFace, drawChipStack, CARD_W, CARD_H, CARD_W_SM, CARD_H_SM } from './draw';
+
+export interface SeatViewModel {
+  player: HandPlayer;
+  isDealer: boolean;
+  isSmallBlind: boolean;
+  isBigBlind: boolean;
+  isActing: boolean;
+  isWinner: boolean;
+  showCards: boolean;
+  handLabel?: string;
+}
+
+export interface PokerCanvasProps {
+  seats: SeatViewModel[];
+  communityCards: Card[];
+  potTotal: number;
+  width?: number;
+  height?: number;
+}
+
+function truncateName(name: string, max = 8): string {
+  return name.length > max ? `${name.slice(0, max - 1)}…` : name;
+}
+
+function seatPosition(index: number, total: number, w: number, h: number) {
+  const theta = (index / total) * 2 * Math.PI;
+  const x = w / 2 + (w * 0.42) * Math.sin(theta);
+  const y = h / 2 + (h * 0.38) * Math.cos(theta);
+  const chipX = x + (w / 2 - x) * 0.35;
+  const chipY = y + (h / 2 - y) * 0.35;
+  return { x, y, chipX, chipY };
+}
+
+function drawFelt(w: number, h: number): Container {
+  const c = new Container();
+  const rail = new Graphics();
+  rail.roundRect(0, 0, w, h, h * 0.48).fill(theme.RAIL_WOOD_DARK);
+  rail.roundRect(0, 0, w, h, h * 0.48).stroke({ width: 3, color: theme.GOLD, alpha: 0.4 });
+  c.addChild(rail);
+
+  const inset = Math.min(w, h) * 0.045;
+  const felt = new Graphics();
+  felt.roundRect(inset, inset, w - inset * 2, h - inset * 2, (h - inset * 2) * 0.48).fill(theme.FELT_LIGHT);
+  // subtle radial highlight toward centre to suggest fabric sheen
+  felt.ellipse(w / 2, h * 0.4, w * 0.32, h * 0.22).fill({ color: theme.FELT_DARK, alpha: 0.001 });
+  c.addChild(felt);
+
+  const innerLine = new Graphics();
+  innerLine
+    .roundRect(inset + 14, inset + 14, w - (inset + 14) * 2, h - (inset + 14) * 2, (h - inset * 2) * 0.42)
+    .stroke({ width: 1.5, color: theme.GOLD, alpha: 0.18 });
+  c.addChild(innerLine);
+
+  return c;
+}
+
+export function PokerCanvas({ seats, communityCards, potTotal, width = 900, height = 520 }: PokerCanvasProps) {
+  const hostRef = useRef<HTMLDivElement>(null);
+  const appRef = useRef<Application | null>(null);
+  const sceneRef = useRef<Container | null>(null);
+
+  useEffect(() => {
+    let destroyed = false;
+    const app = new Application();
+    appRef.current = app;
+    (async () => {
+      await app.init({ width, height, backgroundAlpha: 0, antialias: true, resolution: Math.min(window.devicePixelRatio || 1, 2) });
+      if (destroyed) {
+        app.destroy(true);
+        return;
+      }
+      hostRef.current?.appendChild(app.canvas);
+      const scene = new Container();
+      app.stage.addChild(scene);
+      sceneRef.current = scene;
+      renderScene();
+    })();
+
+    return () => {
+      destroyed = true;
+      sceneRef.current = null;
+      const a = appRef.current;
+      appRef.current = null;
+      if (a && a.renderer) a.destroy(true);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [width, height]);
+
+  function renderScene() {
+    const scene = sceneRef.current;
+    if (!scene) return;
+    scene.removeChildren();
+
+    scene.addChild(drawFelt(width, height));
+
+    // Community cards
+    const board = new Container();
+    const cardGap = CARD_W + 8;
+    const startX = width / 2 - (communityCards.length * cardGap) / 2 + cardGap / 2;
+    communityCards.forEach((card, i) => {
+      const card3d = drawCardFace(card);
+      card3d.position.set(startX + i * cardGap - CARD_W / 2, height * 0.38 - CARD_H / 2);
+      board.addChild(card3d);
+    });
+    if (communityCards.length === 0) {
+      const style = new TextStyle({ fontFamily: 'Georgia, serif', fontSize: 14, fill: 0x9fe3bd, fontStyle: 'italic' });
+      const t = new Text({ text: '— pre-flop —', style });
+      t.anchor.set(0.5);
+      t.position.set(width / 2, height * 0.38);
+      board.addChild(t);
+    }
+    scene.addChild(board);
+
+    // Pot badge
+    const potG = new Graphics();
+    const potLabel = new Text({
+      text: `Pot: ${potTotal}`,
+      style: new TextStyle({ fontFamily: 'system-ui, sans-serif', fontSize: 14, fontWeight: 'bold', fill: theme.GOLD_BRIGHT }),
+    });
+    potLabel.anchor.set(0.5);
+    const potW = Math.max(80, potLabel.width + 24);
+    potG.roundRect(-potW / 2, -12, potW, 24, 12).fill({ color: 0x000000, alpha: 0.55 }).stroke({ width: 1, color: theme.GOLD, alpha: 0.5 });
+    const potContainer = new Container();
+    potContainer.addChild(potG, potLabel);
+    potContainer.position.set(width / 2, height * 0.52);
+    scene.addChild(potContainer);
+
+    const total = seats.length;
+    seats.forEach((seat, idx) => {
+      const pos = seatPosition(idx, total, width, height);
+      scene.addChild(buildSeatNode(seat, pos.x, pos.y));
+      if (seat.player.streetContributed > 0) {
+        const chips = drawChipStack(seat.player.streetContributed);
+        chips.position.set(pos.chipX, pos.chipY);
+        scene.addChild(chips);
+      }
+    });
+  }
+
+  function buildSeatNode(seat: SeatViewModel, x: number, y: number): Container {
+    const c = new Container();
+    c.position.set(x, y);
+    const { player, isDealer, isSmallBlind, isBigBlind, isActing, isWinner, showCards, handLabel } = seat;
+
+    const boxW = 128;
+    const boxH = 86;
+    const panel = new Graphics();
+    const borderColor = isWinner ? theme.WINNER_GOLD : isActing ? theme.ACTING_RING : theme.SEAT_BORDER;
+    const borderWidth = isWinner || isActing ? 2.5 : 1;
+    panel.roundRect(-boxW / 2, -boxH / 2, boxW, boxH, 10).fill({ color: theme.SEAT_BG, alpha: 0.85 }).stroke({ width: borderWidth, color: borderColor });
+    if (player.folded) panel.alpha = 0.45;
+    c.addChild(panel);
+
+    const avatar = drawAvatar(player.name.charAt(0), 14, isActing ? theme.ACTING_RING : 0x475569);
+    avatar.position.set(-boxW / 2 + 16, -boxH / 2 + 16);
+    c.addChild(avatar);
+
+    const nameStyle = new TextStyle({ fontFamily: 'system-ui, sans-serif', fontSize: 10, fontWeight: 'bold', fill: 0xe5e7eb });
+    const nameText = new Text({ text: truncateName(player.name), style: nameStyle });
+    nameText.anchor.set(0, 0.5);
+    nameText.position.set(-boxW / 2 + 32, -boxH / 2 + 16);
+    const maxNameWidth = boxW - 32 - 30;
+    if (nameText.width > maxNameWidth) nameText.scale.set(maxNameWidth / nameText.width, 1);
+    c.addChild(nameText);
+
+    const stackStyle = new TextStyle({ fontFamily: 'monospace', fontSize: 11, fill: 0x6ee7b7 });
+    const stackText = new Text({ text: String(player.stack), style: stackStyle });
+    stackText.anchor.set(1, 0.5);
+    stackText.position.set(boxW / 2 - 8, -boxH / 2 + 16);
+    c.addChild(stackText);
+
+    // Hole cards
+    const cardsContainer = new Container();
+    const gap = CARD_W_SM + 4;
+    if (player.holeCards.length === 0) {
+      const back1 = drawCardBack(CARD_W_SM, CARD_H_SM);
+      const back2 = drawCardBack(CARD_W_SM, CARD_H_SM);
+      back1.position.set(-gap / 2 - CARD_W_SM / 2, 6);
+      back2.position.set(gap / 2 - CARD_W_SM / 2, 6);
+      cardsContainer.addChild(back1, back2);
+    } else {
+      player.holeCards.forEach((card, i) => {
+        const node = showCards ? drawCardFace(card, CARD_W_SM, CARD_H_SM) : drawCardBack(CARD_W_SM, CARD_H_SM);
+        node.position.set((i === 0 ? -gap / 2 : gap / 2) - CARD_W_SM / 2, 6);
+        cardsContainer.addChild(node);
+      });
+    }
+    c.addChild(cardsContainer);
+
+    // Badges
+    let badgeX = boxW / 2 - 10;
+    const badgeY = -boxH / 2 - 4;
+    if (isBigBlind) {
+      const b = drawBadge('BB', 0xf43f5e);
+      b.position.set(badgeX, badgeY);
+      c.addChild(b);
+      badgeX -= 20;
+    }
+    if (isSmallBlind) {
+      const b = drawBadge('SB', 0x38bdf8);
+      b.position.set(badgeX, badgeY);
+      c.addChild(b);
+      badgeX -= 20;
+    }
+    if (isDealer) {
+      const b = drawBadge('D', 0xffffff);
+      b.position.set(badgeX, badgeY);
+      c.addChild(b);
+    }
+
+    if (player.folded) {
+      const t = new Text({
+        text: 'FOLDED',
+        style: new TextStyle({ fontFamily: 'system-ui, sans-serif', fontSize: 9, fill: 0x94a3b8, letterSpacing: 1 }),
+      });
+      t.anchor.set(0.5);
+      t.position.set(0, boxH / 2 - 8);
+      c.addChild(t);
+    } else if (handLabel) {
+      const t = new Text({
+        text: handLabel,
+        style: new TextStyle({ fontFamily: 'system-ui, sans-serif', fontSize: 9, fontWeight: 'bold', fill: theme.GOLD_BRIGHT }),
+      });
+      t.anchor.set(0.5);
+      t.position.set(0, boxH / 2 - 8);
+      c.addChild(t);
+    }
+
+    return c;
+  }
+
+  useEffect(() => {
+    renderScene();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seats, communityCards, potTotal, width, height]);
+
+  return <div ref={hostRef} style={{ width, height }} />;
+}

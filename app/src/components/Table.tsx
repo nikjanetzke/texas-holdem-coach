@@ -1,24 +1,21 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { GameSetup } from '../hooks/useGame';
 import { useGame } from '../hooks/useGame';
-import { CardView } from './CardView';
-import { Seat } from './Seat';
-import { Chips } from './Chips';
 import { HandHistoryPanel } from './HandHistoryPanel';
 import { ExportControls } from './ExportControls';
 import { HAND_RANK_NAMES } from '../engine/evaluator';
 import type { ActionType } from '../engine/betting';
+import { PokerCanvas } from '../pixi/PokerCanvas';
+import { soundManager, type SfxName } from '../sound/SoundManager';
 
-function seatPosition(index: number, total: number) {
-  // index 0 sits at the bottom (the human); the rest fan out clockwise around an oval.
-  const theta = (index / total) * 2 * Math.PI;
-  const x = 50 + 46 * Math.sin(theta);
-  const y = 50 + 43 * Math.cos(theta);
-  // Bet chips are nudged from the seat toward the centre of the felt.
-  const chipX = x + (50 - x) * 0.3;
-  const chipY = y + (50 - y) * 0.3;
-  return { x, y, chipX, chipY };
-}
+const ACTION_SOUND: Record<ActionType, SfxName> = {
+  fold: 'fold',
+  check: 'check',
+  call: 'call',
+  bet: 'bet',
+  raise: 'bet',
+  'all-in': 'allin',
+};
 
 export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void }) {
   const {
@@ -41,6 +38,9 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
     scheduleName,
   } = useGame(setup);
   const [raiseAmount, setRaiseAmount] = useState(0);
+  const [muted, setMuted] = useState(soundManager.muted);
+  const lastLoggedActionCount = useRef(0);
+  const lastHandOverSignaled = useRef(false);
 
   const validActions =
     engine && !engine.isHandOver() && currentActorId === 'human' ? engine.getValidActions('human') : null;
@@ -52,6 +52,30 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
       setRaiseAmount(Math.min(validActions.maxRaiseTo, opening));
     }
   }, [validActions, currentLevel.bigBlind]);
+
+  // Play a sound effect for every new action logged (human or bot) and on showdown.
+  useEffect(() => {
+    if (!engine) return;
+    const log = engine.actionLog;
+    for (let i = lastLoggedActionCount.current; i < log.length; i++) {
+      soundManager.play(ACTION_SOUND[log[i].type]);
+    }
+    lastLoggedActionCount.current = log.length;
+
+    if (engine.isHandOver() && !lastHandOverSignaled.current) {
+      lastHandOverSignaled.current = true;
+      soundManager.play('win');
+    } else if (!engine.isHandOver()) {
+      lastHandOverSignaled.current = false;
+    }
+  });
+
+  function toggleMuted() {
+    const next = !muted;
+    soundManager.setMuted(next);
+    setMuted(next);
+    if (!next) soundManager.play('click');
+  }
 
   if (!engine) {
     return (
@@ -72,8 +96,7 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
 
   const sbPlayerId = engine.smallBlindId;
   const bbPlayerId = engine.bigBlindId;
-
-  const total = engine.players.length;
+  const canvasSize = { width: 880, height: 500 };
 
   return (
     <div className="mx-auto flex min-h-screen max-w-5xl flex-col px-4 py-3">
@@ -107,64 +130,39 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
           >
             Coach: {coachEnabled ? 'On' : 'Off'}
           </button>
+          <button
+            onClick={toggleMuted}
+            className="rounded-full bg-slate-800 px-3 py-1 text-xs font-semibold text-slate-300 hover:bg-slate-700"
+            title="Toggle sound effects"
+          >
+            {muted ? '🔇 Muted' : '🔊 Sound'}
+          </button>
         </div>
         <span className="font-mono">Your stack: {human.stack}</span>
       </div>
 
       {/* Felt */}
-      <div className="relative mx-auto aspect-[16/10] w-full max-w-4xl">
-        <div className="absolute inset-0 rounded-[48%] border-[10px] border-amber-950/80 bg-gradient-to-b from-emerald-700 to-emerald-900 shadow-2xl shadow-black/60">
-          <div className="absolute inset-6 rounded-[48%] border border-emerald-400/10" />
-        </div>
-
-        {/* Centre: community cards + pot */}
-        <div className="absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-3">
-          <div className="flex min-h-[80px] items-center justify-center gap-2">
-            {engine.communityCards.length === 0 ? (
-              <span className="text-sm italic text-emerald-200/50">— pre-flop —</span>
-            ) : (
-              engine.communityCards.map((c) => <CardView key={`${c.rank}${c.suit}`} card={c} size="lg" animate />)
-            )}
-          </div>
-          <div className="animate-pot rounded-full bg-slate-950/70 px-4 py-1 text-sm font-semibold text-amber-200 ring-1 ring-amber-400/40">
-            Pot: {potTotal}
-          </div>
-        </div>
-
-        {/* Seats */}
-        {engine.players.map((p, idx) => {
-          const pos = seatPosition(idx, total);
-          const showCards = p.id === 'human' || (isHandOver && !p.folded && !!engine.showdownResult);
-          const handLabel =
-            isHandOver && bestHands[p.id] ? HAND_RANK_NAMES[bestHands[p.id].rank] : undefined;
-          return (
-            <div key={p.id}>
-              <div
-                className="absolute -translate-x-1/2 -translate-y-1/2"
-                style={{ left: `${pos.x}%`, top: `${pos.y}%` }}
-              >
-                <Seat
-                  player={p}
-                  isDealer={idx === engine.dealerSeat}
-                  isSmallBlind={p.id === sbPlayerId}
-                  isBigBlind={p.id === bbPlayerId}
-                  isActing={p.id === currentActorId && !isHandOver}
-                  isWinner={!!payouts[p.id]}
-                  showCards={showCards}
-                  handLabel={handLabel}
-                />
-              </div>
-              {p.streetContributed > 0 && (
-                <div
-                  className="absolute -translate-x-1/2 -translate-y-1/2"
-                  style={{ left: `${pos.chipX}%`, top: `${pos.chipY}%` }}
-                >
-                  <Chips amount={p.streetContributed} />
-                </div>
-              )}
-            </div>
-          );
-        })}
+      <div className="mx-auto w-full max-w-4xl overflow-hidden">
+        <PokerCanvas
+          width={canvasSize.width}
+          height={canvasSize.height}
+          potTotal={potTotal}
+          communityCards={engine.communityCards}
+          seats={engine.players.map((p, idx) => {
+            const showCards = p.id === 'human' || (isHandOver && !p.folded && !!engine.showdownResult);
+            const handLabel = isHandOver && bestHands[p.id] ? HAND_RANK_NAMES[bestHands[p.id].rank] : undefined;
+            return {
+              player: p,
+              isDealer: idx === engine.dealerSeat,
+              isSmallBlind: p.id === sbPlayerId,
+              isBigBlind: p.id === bbPlayerId,
+              isActing: p.id === currentActorId && !isHandOver,
+              isWinner: !!payouts[p.id],
+              showCards,
+              handLabel,
+            };
+          })}
+        />
       </div>
 
       {/* Coach panel */}
