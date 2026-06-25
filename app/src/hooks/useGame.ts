@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { HandEngine } from '../engine/game';
-import type { ActionLogEntry, HandPlayer, ShowdownResult } from '../engine/game';
+import type { ActionLogEntry, HandPlayer, ShowdownResult, Street } from '../engine/game';
 import type { Card } from '../engine/deck';
 import type { ActionType } from '../engine/betting';
 import { decideAIAction } from '../ai/decide';
@@ -28,6 +28,17 @@ export interface HandSummaryEntry {
   playerId: string;
   score: number;
   explanation: string;
+  thinkMs: number;
+}
+
+// One human decision's think-time and the context it was made in, captured for
+// the post-hand review, the export, and (later) consistency analysis.
+export interface DecisionTiming {
+  street: Street;
+  action: ActionType;
+  thinkMs: number;
+  equityPercent: number | null;
+  potOddsPercent: number | null;
 }
 
 export interface HandRecord {
@@ -37,6 +48,7 @@ export interface HandRecord {
   communityCards: Card[];
   actionLog: ActionLogEntry[];
   showdownResult: ShowdownResult | null;
+  decisionTimings: DecisionTiming[];
 }
 
 const ARCHETYPE_LIST = [AI_ARCHETYPES.tight, AI_ARCHETYPES.looseAggressive, AI_ARCHETYPES.callingStation];
@@ -90,6 +102,11 @@ export function useGame(setup: GameSetup) {
   const leakTracker = useRef(LeakTracker.fromJSON(initialSaved?.leakCounts));
   const [, forceRender] = useState(0);
 
+  // Think-time tracking: when the human's turn begins we stamp a start time, and
+  // each decision's elapsed time is collected per hand for the review and export.
+  const turnStartRef = useRef<number | null>(null);
+  const currentHandTimingsRef = useRef<DecisionTiming[]>([]);
+
   const startHand = useCallback((dealer: number) => {
     const activeSeats = setup.seats.filter((s) => stacks[s.id] > 0);
     if (activeSeats.length < 2) return;
@@ -102,6 +119,8 @@ export function useGame(setup: GameSetup) {
     setEngine(newEngine);
     setHandSummary(null);
     setAdvice(null);
+    currentHandTimingsRef.current = [];
+    turnStartRef.current = null;
   }, [setup, stacks]);
 
   useEffect(() => {
@@ -139,6 +158,13 @@ export function useGame(setup: GameSetup) {
   useEffect(() => {
     computeAdviceForHuman();
   }, [computeAdviceForHuman]);
+
+  // Start the think-time clock the moment it becomes the human's turn to act.
+  useEffect(() => {
+    if (currentActorId === 'human' && !engine?.isHandOver()) {
+      turnStartRef.current = performance.now();
+    }
+  }, [currentActorId, engine]);
 
   // Drive AI turns automatically.
   useEffect(() => {
@@ -196,6 +222,7 @@ export function useGame(setup: GameSetup) {
       communityCards: engine.communityCards,
       actionLog: engine.actionLog,
       showdownResult: engine.showdownResult,
+      decisionTimings: [...currentHandTimingsRef.current],
     };
     setHandHistory((prev) => [record, ...prev].slice(0, MAX_HAND_HISTORY));
   });
@@ -217,6 +244,17 @@ export function useGame(setup: GameSetup) {
     if (!engine || currentActorId !== 'human') return;
     const player = engine.players.find((p) => p.id === 'human')!;
     const valid = engine.getValidActions('human');
+    const thinkMs = turnStartRef.current != null ? Math.round(performance.now() - turnStartRef.current) : 0;
+    turnStartRef.current = null;
+
+    currentHandTimingsRef.current.push({
+      street: engine.street,
+      action: type,
+      thinkMs,
+      equityPercent: advice?.equityPercent ?? null,
+      potOddsPercent: advice?.potOddsPercent ?? null,
+    });
+
     if (advice) {
       const result = scoreDecision({
         actualAction: type,
@@ -232,7 +270,7 @@ export function useGame(setup: GameSetup) {
         potOddsPercent: advice.potOddsPercent,
         position: advice.position,
       });
-      setHandSummary((prev) => [...(prev ?? []), { playerId: 'human', score: result.score, explanation: result.explanation }]);
+      setHandSummary((prev) => [...(prev ?? []), { playerId: 'human', score: result.score, explanation: result.explanation, thinkMs }]);
     }
     engine.act('human', type, amount ?? (type === 'call' ? valid.callAmount + player.streetContributed : undefined));
     forceRender((n) => n + 1);

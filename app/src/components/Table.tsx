@@ -5,6 +5,7 @@ import { CardView } from './CardView';
 import { Seat } from './Seat';
 import { Chips } from './Chips';
 import { HandHistoryPanel } from './HandHistoryPanel';
+import { ExportControls } from './ExportControls';
 import { HAND_RANK_NAMES } from '../engine/evaluator';
 import type { ActionType } from '../engine/betting';
 
@@ -234,7 +235,7 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
                   <span className={s.score >= 7 ? 'text-emerald-400' : s.score >= 5 ? 'text-amber-400' : 'text-rose-400'}>
                     Decision score {s.score}/10
                   </span>{' '}
-                  — {s.explanation}
+                  <span className="text-slate-500">({(s.thinkMs / 1000).toFixed(1)}s)</span> — {s.explanation}
                 </div>
               ))}
             </div>
@@ -262,6 +263,7 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
       )}
 
       <HandHistoryPanel history={handHistory} />
+      <ExportControls setup={setup} handHistory={handHistory} leakTracker={leakTracker} />
     </div>
   );
 }
