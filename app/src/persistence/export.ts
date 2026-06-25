@@ -23,11 +23,12 @@ export function buildSessionExport(
   setup: GameSetup,
   handHistory: HandRecord[],
   leakTracker: LeakTracker,
+  blinds: { smallBlind: number; bigBlind: number },
 ): SessionExport {
   return {
     version: EXPORT_VERSION,
     exportedAt: new Date().toISOString(),
-    blinds: { smallBlind: setup.smallBlind, bigBlind: setup.bigBlind },
+    blinds,
     startingStack: setup.startingStack,
     players: setup.seats.map((s) => ({ id: s.id, name: s.name, isHuman: s.isHuman })),
     leaks: leakTracker.topLeaks(10),

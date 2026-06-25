@@ -137,4 +137,61 @@ describe('HandEngine', () => {
     const totalPayout = Object.values(engine.showdownResult!.payouts).reduce((a, b) => a + b, 0);
     expect(totalPayout).toBe(totalPotAmount);
   });
+
+  it('collects antes as dead money without affecting the amount owed to call the blind', () => {
+    const engine = new HandEngine({
+      players: [
+        { id: 'a', name: 'A', stack: 1000 },
+        { id: 'b', name: 'B', stack: 1000 },
+        { id: 'c', name: 'C', stack: 1000 },
+      ],
+      dealerSeat: 0,
+      smallBlind: 5,
+      bigBlind: 10,
+      ante: 2,
+      rng: fixedRng(42),
+    });
+
+    // Every active player posts the ante into the pot (totalContributed) but it is
+    // not counted toward the current bet (streetContributed).
+    for (const p of engine.players) {
+      expect(p.totalContributed).toBeGreaterThanOrEqual(2);
+    }
+    expect(engine.players[0].totalContributed).toBe(2); // dealer: ante only
+    expect(engine.players[1].streetContributed).toBe(5); // SB still owes only the blind
+    expect(engine.players[1].totalContributed).toBe(7); // ante + SB
+    expect(engine.players[2].streetContributed).toBe(10); // BB
+    expect(engine.players[2].totalContributed).toBe(12); // ante + BB
+    expect(engine.currentBet).toBe(10);
+
+    // Pot already contains the three antes plus the blinds.
+    const pot = engine.players.reduce((sum, p) => sum + p.totalContributed, 0);
+    expect(pot).toBe(2 * 3 + 5 + 10);
+  });
+
+  it('conserves chips through a hand played with antes', () => {
+    const engine = new HandEngine({
+      players: [
+        { id: 'a', name: 'A', stack: 1000 },
+        { id: 'b', name: 'B', stack: 1000 },
+        { id: 'c', name: 'C', stack: 1000 },
+      ],
+      dealerSeat: 0,
+      smallBlind: 5,
+      bigBlind: 10,
+      ante: 5,
+      rng: fixedRng(123),
+    });
+
+    while (engine.street !== 'showdown') {
+      const actorId = engine.getCurrentActorId();
+      if (!actorId) break;
+      const valid = engine.getValidActions(actorId);
+      engine.act(actorId, valid.types.includes('check') ? 'check' : 'call');
+    }
+
+    expect(engine.street).toBe('showdown');
+    const totalChips = engine.players.reduce((sum, p) => sum + p.stack, 0);
+    expect(totalChips).toBe(3000); // no chips created or destroyed
+  });
 });

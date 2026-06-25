@@ -34,6 +34,11 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
     handHistory,
     coachEnabled,
     setCoachEnabled,
+    currentLevel,
+    levelNumber,
+    nextLevel,
+    msLeftInLevel,
+    scheduleName,
   } = useGame(setup);
   const [raiseAmount, setRaiseAmount] = useState(0);
 
@@ -43,10 +48,10 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
   // Reset the bet sizing slider to a sensible default whenever it's the human's turn.
   useEffect(() => {
     if (validActions) {
-      const opening = validActions.types.includes('raise') ? validActions.minRaiseTo : setup.bigBlind;
+      const opening = validActions.types.includes('raise') ? validActions.minRaiseTo : currentLevel.bigBlind;
       setRaiseAmount(Math.min(validActions.maxRaiseTo, opening));
     }
-  }, [validActions, setup.bigBlind]);
+  }, [validActions, currentLevel.bigBlind]);
 
   if (!engine) {
     return (
@@ -65,9 +70,8 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
   const payouts = engine.showdownResult?.payouts ?? {};
   const bestHands = engine.showdownResult?.bestHandByPlayer ?? {};
 
-  // Blinds are always the first two actions posted in a hand.
-  const sbPlayerId = engine.actionLog[0]?.playerId;
-  const bbPlayerId = engine.actionLog[1]?.playerId;
+  const sbPlayerId = engine.smallBlindId;
+  const bbPlayerId = engine.bigBlindId;
 
   const total = engine.players.length;
 
@@ -81,9 +85,16 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
         <div className="flex items-center gap-4">
           <span>Hand #{handNumber}</span>
           <span className="rounded-full bg-slate-800 px-3 py-1 capitalize text-emerald-300">{engine.street}</span>
-          <span>
-            Blinds {setup.smallBlind}/{setup.bigBlind}
-          </span>
+          <div className="flex items-center gap-2" title={nextLevel ? `Next: ${nextLevel.smallBlind}/${nextLevel.bigBlind}` : 'Top level reached'}>
+            <span>
+              Blinds {currentLevel.smallBlind}/{currentLevel.bigBlind}
+              {currentLevel.ante > 0 && <span className="text-slate-400"> (ante {currentLevel.ante})</span>}
+            </span>
+            <span className="rounded-full bg-slate-800 px-2 py-1 text-xs text-amber-200">
+              {scheduleName} L{levelNumber}
+              {Number.isFinite(msLeftInLevel) && ` · ${formatClock(msLeftInLevel)}`}
+            </span>
+          </div>
           <button
             onClick={() => setCoachEnabled((v) => !v)}
             className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
@@ -185,7 +196,7 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
             <div className="mb-3 flex items-center gap-3">
               <input
                 type="range"
-                min={validActions.types.includes('raise') ? validActions.minRaiseTo : setup.bigBlind}
+                min={validActions.types.includes('raise') ? validActions.minRaiseTo : currentLevel.bigBlind}
                 max={validActions.maxRaiseTo}
                 value={raiseAmount}
                 onChange={(e) => setRaiseAmount(Number(e.target.value))}
@@ -193,8 +204,8 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
               />
               <span className="w-20 text-right font-mono text-amber-200">{raiseAmount}</span>
               <div className="flex gap-1">
-                <QuickBet label="½ pot" onClick={() => setRaiseAmount(clamp(Math.round(potTotal * 0.5), validActions, setup.bigBlind))} />
-                <QuickBet label="pot" onClick={() => setRaiseAmount(clamp(potTotal, validActions, setup.bigBlind))} />
+                <QuickBet label="½ pot" onClick={() => setRaiseAmount(clamp(Math.round(potTotal * 0.5), validActions, currentLevel.bigBlind))} />
+                <QuickBet label="pot" onClick={() => setRaiseAmount(clamp(potTotal, validActions, currentLevel.bigBlind))} />
                 <QuickBet label="max" onClick={() => setRaiseAmount(validActions.maxRaiseTo)} />
               </div>
             </div>
@@ -263,9 +274,21 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
       )}
 
       <HandHistoryPanel history={handHistory} />
-      <ExportControls setup={setup} handHistory={handHistory} leakTracker={leakTracker} />
+      <ExportControls
+        setup={setup}
+        handHistory={handHistory}
+        leakTracker={leakTracker}
+        blinds={{ smallBlind: currentLevel.smallBlind, bigBlind: currentLevel.bigBlind }}
+      />
     </div>
   );
+}
+
+function formatClock(ms: number): string {
+  const totalSeconds = Math.ceil(ms / 1000);
+  const m = Math.floor(totalSeconds / 60);
+  const s = totalSeconds % 60;
+  return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
 function clamp(value: number, valid: { minRaiseTo: number; maxRaiseTo: number; types: ActionType[] }, bb: number) {

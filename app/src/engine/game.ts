@@ -37,6 +37,7 @@ export interface HandEngineOptions {
   dealerSeat: number; // index into players array
   smallBlind: number;
   bigBlind: number;
+  ante?: number;
   rng?: () => number;
 }
 
@@ -45,6 +46,7 @@ export class HandEngine {
   dealerSeat: number;
   smallBlind: number;
   bigBlind: number;
+  ante: number;
   street: Street = 'preflop';
   communityCards: Card[] = [];
   currentBet = 0;
@@ -55,6 +57,8 @@ export class HandEngine {
   actedPlayerIds = new Set<string>();
   actionLog: ActionLogEntry[] = [];
   showdownResult: ShowdownResult | null = null;
+  smallBlindId: string | null = null;
+  bigBlindId: string | null = null;
   private shoe: Shoe;
 
   constructor(options: HandEngineOptions) {
@@ -70,6 +74,7 @@ export class HandEngine {
     this.dealerSeat = options.dealerSeat;
     this.smallBlind = options.smallBlind;
     this.bigBlind = options.bigBlind;
+    this.ante = options.ante ?? 0;
     this.minRaise = options.bigBlind;
     this.shoe = new Shoe(options.rng);
     this.dealAndPostBlinds();
@@ -100,17 +105,35 @@ export class HandEngine {
       }
     }
 
+    // Antes are dead money: they go to the pot (totalContributed) but do not count
+    // toward matching the current bet (streetContributed stays untouched).
+    if (this.ante > 0) {
+      for (const seat of active) {
+        const player = this.players[seat];
+        const delta = Math.min(this.ante, player.stack);
+        if (delta <= 0) continue;
+        player.stack -= delta;
+        player.totalContributed += delta;
+        player.allIn = player.stack === 0;
+        this.actionLog.push({ street: 'preflop', playerId: player.id, type: 'bet', amount: delta });
+      }
+    }
+
     if (active.length === 2) {
       // Heads-up: dealer posts small blind, other player posts big blind.
       this.postBlind(this.dealerSeat, this.smallBlind);
       const bbSeat = this.nextSeat(this.dealerSeat);
       this.postBlind(bbSeat, this.bigBlind);
+      this.smallBlindId = this.players[this.dealerSeat].id;
+      this.bigBlindId = this.players[bbSeat].id;
       this.actingOrder = [this.dealerSeat, bbSeat];
     } else {
       const sbSeat = this.nextSeat(this.dealerSeat);
       const bbSeat = this.nextSeat(sbSeat);
       this.postBlind(sbSeat, this.smallBlind);
       this.postBlind(bbSeat, this.bigBlind);
+      this.smallBlindId = this.players[sbSeat].id;
+      this.bigBlindId = this.players[bbSeat].id;
 
       const order: number[] = [];
       let seat = this.nextSeat(bbSeat);

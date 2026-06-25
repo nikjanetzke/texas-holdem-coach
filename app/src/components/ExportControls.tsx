@@ -7,16 +7,18 @@ export function ExportControls({
   setup,
   handHistory,
   leakTracker,
+  blinds,
 }: {
   setup: GameSetup;
   handHistory: HandRecord[];
   leakTracker: LeakTracker;
+  blinds: { smallBlind: number; bigBlind: number };
 }) {
   const [copied, setCopied] = useState<'json' | 'text' | null>(null);
 
   if (handHistory.length === 0) return null;
 
-  const build = () => buildSessionExport(setup, handHistory, leakTracker);
+  const build = () => buildSessionExport(setup, handHistory, leakTracker, blinds);
   const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
 
   const copy = async (kind: 'json' | 'text') => {

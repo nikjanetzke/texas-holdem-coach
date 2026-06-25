@@ -9,6 +9,8 @@ import type { AIProfile } from '../ai/profiles';
 import { classifyPosition, generateAdvice, LeakTracker, scoreDecision } from '../coach/coach';
 import type { CoachAdvice, Leak } from '../coach/coach';
 import { loadSession, saveSession } from '../persistence/storage';
+import { BLIND_SCHEDULES, DEFAULT_SCHEDULE_ID, levelAt } from '../engine/blinds';
+import type { BlindLevel } from '../engine/blinds';
 
 export interface SeatConfig {
   id: string;
@@ -20,8 +22,7 @@ export interface SeatConfig {
 export interface GameSetup {
   seats: SeatConfig[];
   startingStack: number;
-  smallBlind: number;
-  bigBlind: number;
+  scheduleId: string;
 }
 
 export interface HandSummaryEntry {
@@ -70,6 +71,7 @@ interface SavedSession {
   leakCounts: { counts: Record<Leak, number>; totalDecisions: number };
   handHistory: HandRecord[];
   coachEnabled: boolean;
+  levelIndex: number;
 }
 
 // Bots act after a random delay in this range so the table doesn't feel robotic
@@ -102,6 +104,26 @@ export function useGame(setup: GameSetup) {
   const leakTracker = useRef(LeakTracker.fromJSON(initialSaved?.leakCounts));
   const [, forceRender] = useState(0);
 
+  // Tournament blind clock. The level index persists across reloads, but the level
+  // timer restarts on load so time away from the table doesn't fast-forward blinds.
+  const schedule = BLIND_SCHEDULES[setup.scheduleId] ?? BLIND_SCHEDULES[DEFAULT_SCHEDULE_ID];
+  const [levelIndex, setLevelIndex] = useState(initialSaved?.levelIndex ?? 0);
+  // Mirror the level index in a ref so startHand always reads the latest level,
+  // even when called in the same event tick that just advanced it.
+  const levelIndexRef = useRef(levelIndex);
+  const levelMs = schedule.defaultLevelMinutes * 60 * 1000;
+  const levelStartedAtRef = useRef<number>(Date.now());
+  const [nowTick, setNowTick] = useState(Date.now());
+  const currentLevel: BlindLevel = levelAt(schedule, levelIndex);
+  const isLastLevel = levelIndex >= schedule.levels.length - 1;
+  const msLeftInLevel = isLastLevel ? Infinity : Math.max(0, levelMs - (nowTick - levelStartedAtRef.current));
+
+  // Tick once a second so the clock display updates.
+  useEffect(() => {
+    const id = setInterval(() => setNowTick(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+
   // Think-time tracking: when the human's turn begins we stamp a start time, and
   // each decision's elapsed time is collected per hand for the review and export.
   const turnStartRef = useRef<number | null>(null);
@@ -110,18 +132,20 @@ export function useGame(setup: GameSetup) {
   const startHand = useCallback((dealer: number) => {
     const activeSeats = setup.seats.filter((s) => stacks[s.id] > 0);
     if (activeSeats.length < 2) return;
+    const level = levelAt(schedule, levelIndexRef.current);
     const newEngine = new HandEngine({
       players: setup.seats.map((s) => ({ id: s.id, name: s.name, stack: stacks[s.id] })),
       dealerSeat: dealer,
-      smallBlind: setup.smallBlind,
-      bigBlind: setup.bigBlind,
+      smallBlind: level.smallBlind,
+      bigBlind: level.bigBlind,
+      ante: level.ante,
     });
     setEngine(newEngine);
     setHandSummary(null);
     setAdvice(null);
     currentHandTimingsRef.current = [];
     turnStartRef.current = null;
-  }, [setup, stacks]);
+  }, [setup, stacks, schedule]);
 
   useEffect(() => {
     startHand(dealerSeat);
@@ -237,8 +261,9 @@ export function useGame(setup: GameSetup) {
       leakCounts: leakTracker.current.toJSON(),
       handHistory,
       coachEnabled,
+      levelIndex,
     });
-  }, [setup, stacks, dealerSeat, handNumber, handHistory, coachEnabled]);
+  }, [setup, stacks, dealerSeat, handNumber, handHistory, coachEnabled, levelIndex]);
 
   const humanAct = useCallback((type: ActionType, amount?: number) => {
     if (!engine || currentActorId !== 'human') return;
@@ -277,11 +302,18 @@ export function useGame(setup: GameSetup) {
   }, [engine, currentActorId, advice]);
 
   const nextHand = useCallback(() => {
+    // Blinds escalate at the hand boundary once the level timer has expired.
+    if (!isLastLevel && Date.now() - levelStartedAtRef.current >= levelMs) {
+      const newIndex = levelIndexRef.current + 1;
+      levelIndexRef.current = newIndex;
+      levelStartedAtRef.current = Date.now();
+      setLevelIndex(newIndex);
+    }
     const nextDealer = (dealerSeat + 1) % setup.seats.length;
     setDealerSeat(nextDealer);
     setHandNumber((n) => n + 1);
     startHand(nextDealer);
-  }, [dealerSeat, setup.seats.length, startHand]);
+  }, [dealerSeat, setup.seats.length, startHand, isLastLevel, levelMs]);
 
   return {
     engine,
@@ -297,5 +329,10 @@ export function useGame(setup: GameSetup) {
     handHistory,
     coachEnabled,
     setCoachEnabled,
+    currentLevel,
+    levelNumber: levelIndex + 1,
+    nextLevel: isLastLevel ? null : levelAt(schedule, levelIndex + 1),
+    msLeftInLevel,
+    scheduleName: schedule.name,
   };
 }
