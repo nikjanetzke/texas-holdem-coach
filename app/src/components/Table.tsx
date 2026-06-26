@@ -52,6 +52,7 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
   const [heldAdvice, setHeldAdvice] = useState<typeof advice>(null);
   const [showCardRating, setShowCardRating] = useState(false);
   const feltObserverRef = useRef<ResizeObserver | null>(null);
+  const feltResizeRef = useRef<() => void>(() => {});
   const [canvasSize, setCanvasSize] = useState({ width: 880, height: 500 });
 
   // A callback ref (rather than useEffect on an empty-dep useRef) because the
@@ -60,15 +61,35 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
   const feltRef = useCallback((el: HTMLDivElement | null) => {
     feltObserverRef.current?.disconnect();
     feltObserverRef.current = null;
+    window.removeEventListener('resize', feltResizeRef.current);
     if (!el) return;
+    const ASPECT = 880 / 500;
     const update = (width: number) => {
-      const w = Math.max(320, Math.floor(width));
-      setCanvasSize((prev) => (prev.width === w ? prev : { width: w, height: Math.round(w * (500 / 880)) }));
+      // Fit the table within BOTH the container width and the remaining
+      // viewport height. On a phone in landscape the container is wide but
+      // short, so a width-only sizing made the table taller than the screen
+      // and you couldn't see the whole felt — clamp by available height too.
+      const cw = Math.max(320, Math.floor(width));
+      const top = el.getBoundingClientRect().top;
+      const availH = window.innerHeight - top - 150; // leave room for the action controls below
+      let w = cw;
+      let h = Math.round(w / ASPECT);
+      if (availH > 120 && h > availH) {
+        h = Math.floor(availH);
+        w = Math.min(cw, Math.round(h * ASPECT));
+        h = Math.round(w / ASPECT);
+      }
+      setCanvasSize((prev) => (prev.width === w && prev.height === h ? prev : { width: w, height: h }));
     };
+    const onResize = () => update(el.clientWidth);
+    feltResizeRef.current = onResize;
     update(el.clientWidth);
     const observer = new ResizeObserver((entries) => update(entries[0].contentRect.width));
     observer.observe(el);
     feltObserverRef.current = observer;
+    // Orientation/viewport-height changes don't always change the container
+    // width (which is what ResizeObserver watches), so listen for them too.
+    window.addEventListener('resize', onResize);
   }, []);
 
   const validActions =
@@ -200,7 +221,7 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
       </div>
 
       {/* Felt */}
-      <div ref={feltRef} className="mx-auto w-full max-w-4xl overflow-hidden">
+      <div ref={feltRef} className="mx-auto flex w-full max-w-4xl justify-center overflow-hidden">
         <PokerCanvas
           width={canvasSize.width}
           height={canvasSize.height}
