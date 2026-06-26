@@ -31,6 +31,7 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
     handHistory,
     coachEnabled,
     setCoachEnabled,
+    actionSecondsLeft,
     currentLevel,
     levelNumber,
     nextLevel,
@@ -41,6 +42,7 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
   const [muted, setMuted] = useState(soundManager.muted);
   const lastLoggedActionCount = useRef(0);
   const lastHandOverSignaled = useRef(false);
+  const [speechByPlayer, setSpeechByPlayer] = useState<Record<string, string>>({});
   const feltObserverRef = useRef<ResizeObserver | null>(null);
   const [canvasSize, setCanvasSize] = useState({ width: 880, height: 500 });
 
@@ -77,7 +79,21 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
     if (!engine) return;
     const log = engine.actionLog;
     for (let i = lastLoggedActionCount.current; i < log.length; i++) {
-      soundManager.play(ACTION_SOUND[log[i].type]);
+      const entry = log[i];
+      soundManager.play(ACTION_SOUND[entry.type]);
+      const profile = setup.seats.find((s) => s.id === entry.playerId)?.profile;
+      const lines = profile?.catchphrases[entry.type as keyof typeof profile.catchphrases];
+      if (lines && lines.length > 0) {
+        const line = lines[Math.floor(Math.random() * lines.length)];
+        setSpeechByPlayer((prev) => ({ ...prev, [entry.playerId]: line }));
+        setTimeout(() => {
+          setSpeechByPlayer((prev) => {
+            if (prev[entry.playerId] !== line) return prev;
+            const { [entry.playerId]: _omit, ...rest } = prev;
+            return rest;
+          });
+        }, 2600);
+      }
     }
     lastLoggedActionCount.current = log.length;
 
@@ -178,6 +194,7 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
               isWinner: !!payouts[p.id],
               showCards,
               handLabel,
+              speech: speechByPlayer[p.id],
             };
           })}
         />
@@ -211,6 +228,16 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
       {/* Action bar */}
       {validActions && (
         <div className="animate-fade-up mt-4 rounded-xl border border-slate-700 bg-slate-900/80 p-3">
+          {actionSecondsLeft != null && (
+            <div className="mb-3 h-1.5 w-full overflow-hidden rounded-full bg-slate-800">
+              <div
+                className={`h-full rounded-full transition-[width] duration-1000 ease-linear ${
+                  actionSecondsLeft <= 5 ? 'bg-rose-500' : 'bg-emerald-500'
+                }`}
+                style={{ width: `${(actionSecondsLeft / (setup.actionTimerSeconds ?? 1)) * 100}%` }}
+              />
+            </div>
+          )}
           {(validActions.types.includes('bet') || validActions.types.includes('raise')) && (
             <div className="mb-3 flex items-center gap-3">
               <input

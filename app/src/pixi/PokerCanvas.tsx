@@ -14,6 +14,7 @@ export interface SeatViewModel {
   isWinner: boolean;
   showCards: boolean;
   handLabel?: string;
+  speech?: string;
 }
 
 export interface PokerCanvasProps {
@@ -183,8 +184,8 @@ export function PokerCanvas({ seats, communityCards, potTotal, width = LOGICAL_W
     c.position.set(x, y);
     const { player, isDealer, isSmallBlind, isBigBlind, isActing, isWinner, showCards, handLabel } = seat;
 
-    const boxW = 128;
-    const boxH = 86;
+    const boxW = 150;
+    const boxH = 120;
     const panel = new Graphics();
     const borderColor = isWinner ? theme.WINNER_GOLD : isActing ? theme.ACTING_RING : theme.SEAT_BORDER;
     const borderWidth = isWinner || isActing ? 2.5 : 1;
@@ -192,22 +193,24 @@ export function PokerCanvas({ seats, communityCards, potTotal, width = LOGICAL_W
     if (player.folded) panel.alpha = 0.45;
     c.addChild(panel);
 
-    const avatar = drawFace(player.id, 14, isActing ? theme.ACTING_RING : 0x475569);
-    avatar.position.set(-boxW / 2 + 16, -boxH / 2 + 16);
+    const avatar = drawFace(player.id, 16, isActing ? theme.ACTING_RING : 0x475569);
+    avatar.position.set(-boxW / 2 + 18, -boxH / 2 + 18);
     c.addChild(avatar);
 
-    const nameStyle = new TextStyle({ fontFamily: 'system-ui, sans-serif', fontSize: 10, fontWeight: 'bold', fill: 0xe5e7eb });
-    const nameText = new Text({ text: truncateName(player.name), style: nameStyle });
+    // Name and stack each get their own row so a long archetype name never
+    // collides with the chip count (previously both sat on the same line).
+    const nameStyle = new TextStyle({ fontFamily: 'system-ui, sans-serif', fontSize: 12, fontWeight: 'bold', fill: 0xe5e7eb });
+    const nameText = new Text({ text: truncateName(player.name, 11), style: nameStyle });
     nameText.anchor.set(0, 0.5);
-    nameText.position.set(-boxW / 2 + 32, -boxH / 2 + 16);
-    const maxNameWidth = boxW - 32 - 30;
+    nameText.position.set(-boxW / 2 + 40, -boxH / 2 + 13);
+    const maxNameWidth = boxW - 40 - 14;
     if (nameText.width > maxNameWidth) nameText.scale.set(maxNameWidth / nameText.width, 1);
     c.addChild(nameText);
 
-    const stackStyle = new TextStyle({ fontFamily: 'monospace', fontSize: 11, fill: 0x6ee7b7 });
+    const stackStyle = new TextStyle({ fontFamily: 'monospace', fontSize: 12, fontWeight: 'bold', fill: 0x6ee7b7 });
     const stackText = new Text({ text: String(player.stack), style: stackStyle });
-    stackText.anchor.set(1, 0.5);
-    stackText.position.set(boxW / 2 - 8, -boxH / 2 + 16);
+    stackText.anchor.set(0, 0.5);
+    stackText.position.set(-boxW / 2 + 40, -boxH / 2 + 30);
     c.addChild(stackText);
 
     // Hole cards
@@ -216,13 +219,13 @@ export function PokerCanvas({ seats, communityCards, potTotal, width = LOGICAL_W
     if (player.holeCards.length === 0) {
       const back1 = drawCardBack(CARD_W_SM, CARD_H_SM);
       const back2 = drawCardBack(CARD_W_SM, CARD_H_SM);
-      back1.position.set(-gap / 2 - CARD_W_SM / 2, 6);
-      back2.position.set(gap / 2 - CARD_W_SM / 2, 6);
+      back1.position.set(-gap / 2 - CARD_W_SM / 2, 4);
+      back2.position.set(gap / 2 - CARD_W_SM / 2, 4);
       cardsContainer.addChild(back1, back2);
     } else {
       player.holeCards.forEach((card, i) => {
         const node = showCards ? drawCardFace(card, CARD_W_SM, CARD_H_SM) : drawCardBack(CARD_W_SM, CARD_H_SM);
-        node.position.set((i === 0 ? -gap / 2 : gap / 2) - CARD_W_SM / 2, 6);
+        node.position.set((i === 0 ? -gap / 2 : gap / 2) - CARD_W_SM / 2, 4);
         cardsContainer.addChild(node);
       });
     }
@@ -265,6 +268,26 @@ export function PokerCanvas({ seats, communityCards, potTotal, width = LOGICAL_W
       t.anchor.set(0.5);
       t.position.set(0, boxH / 2 - 8);
       c.addChild(t);
+    }
+
+    if (seat.speech) {
+      const bubbleStyle = new TextStyle({ fontFamily: 'system-ui, sans-serif', fontSize: 11, fontStyle: 'italic', fill: 0x0b0b0b, wordWrap: true, wordWrapWidth: 130 });
+      const bubbleText = new Text({ text: seat.speech, style: bubbleStyle });
+      bubbleText.anchor.set(0.5);
+      const bubbleW = Math.min(150, bubbleText.width + 18);
+      const bubbleH = bubbleText.height + 14;
+      const bubble = new Graphics();
+      bubble
+        .roundRect(-bubbleW / 2, -bubbleH, bubbleW, bubbleH, 8)
+        .fill({ color: 0xfef9c3, alpha: 0.95 })
+        .stroke({ width: 1, color: 0x000000, alpha: 0.3 });
+      bubble.moveTo(-6, -2).lineTo(6, -2).lineTo(0, 8).fill({ color: 0xfef9c3, alpha: 0.95 }).closePath();
+      const bubbleContainer = new Container();
+      bubbleContainer.addChild(bubble);
+      bubbleText.position.set(0, -bubbleH / 2);
+      bubbleContainer.addChild(bubbleText);
+      bubbleContainer.position.set(0, -boxH / 2 - 14);
+      c.addChild(bubbleContainer);
     }
 
     return c;

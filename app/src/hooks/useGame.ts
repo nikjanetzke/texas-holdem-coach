@@ -27,6 +27,8 @@ export interface GameSetup {
   scheduleId: string;
   cardLuck?: LuckBand; // bias the human's starting hands (scenarios)
   scenarioName?: string;
+  /** Seconds the human has to act before auto-folding (or auto-checking if free). Undefined/0 = no timer. */
+  actionTimerSeconds?: number;
 }
 
 export interface HandSummaryEntry {
@@ -63,7 +65,7 @@ export function buildDefaultSeats(numPlayers: number): SeatConfig[] {
   const seats: SeatConfig[] = [{ id: 'human', name: 'You', isHuman: true }];
   for (let i = 1; i < numPlayers; i++) {
     const profile = ARCHETYPE_LIST[(i - 1) % ARCHETYPE_LIST.length];
-    seats.push({ id: `ai-${i}`, name: `${profile.name} ${i}`, isHuman: false, profile });
+    seats.push({ id: `ai-${i}`, name: `${profile.shortName} ${i}`, isHuman: false, profile });
   }
   return seats;
 }
@@ -80,8 +82,8 @@ interface SavedSession {
 
 // Bots act after a random delay in this range so the table doesn't feel robotic
 // and a human player can't infer anything from a fixed AI response time.
-const BOT_DELAY_MIN_MS = 400;
-const BOT_DELAY_MAX_MS = 1600;
+const BOT_DELAY_MIN_MS = 800;
+const BOT_DELAY_MAX_MS = 3200;
 
 function sessionKey(setup: GameSetup): string {
   return setup.seats.map((s) => s.id).join(',');
@@ -189,11 +191,17 @@ export function useGame(setup: GameSetup) {
   }, [computeAdviceForHuman]);
 
   // Start the think-time clock the moment it becomes the human's turn to act.
+  const [actionDeadline, setActionDeadline] = useState<number | null>(null);
   useEffect(() => {
     if (currentActorId === 'human' && !engine?.isHandOver()) {
       turnStartRef.current = performance.now();
+      setActionDeadline(setup.actionTimerSeconds ? Date.now() + setup.actionTimerSeconds * 1000 : null);
+    } else {
+      setActionDeadline(null);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentActorId, engine]);
+  const actionSecondsLeft = actionDeadline != null ? Math.max(0, Math.ceil((actionDeadline - nowTick) / 1000)) : null;
 
   // Drive AI turns automatically.
   useEffect(() => {
@@ -306,6 +314,14 @@ export function useGame(setup: GameSetup) {
     forceRender((n) => n + 1);
   }, [engine, currentActorId, advice]);
 
+  // Auto-act for the human once their action timer expires: check if free, otherwise fold.
+  useEffect(() => {
+    if (actionSecondsLeft !== 0 || currentActorId !== 'human' || !engine || engine.isHandOver()) return;
+    const valid = engine.getValidActions('human');
+    humanAct(valid.types.includes('check') ? 'check' : 'fold');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [actionSecondsLeft, currentActorId, engine]);
+
   const nextHand = useCallback(() => {
     // Blinds escalate at the hand boundary once the level timer has expired.
     if (!isLastLevel && Date.now() - levelStartedAtRef.current >= levelMs) {
@@ -334,6 +350,7 @@ export function useGame(setup: GameSetup) {
     handHistory,
     coachEnabled,
     setCoachEnabled,
+    actionSecondsLeft,
     currentLevel,
     levelNumber: levelIndex + 1,
     nextLevel: isLastLevel ? null : levelAt(schedule, levelIndex + 1),
