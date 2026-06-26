@@ -88,70 +88,177 @@ function hashSeed(seed: string): number {
   return h;
 }
 
-const SKIN_TONES = [0xf1c27d, 0xe0ac69, 0xc68642, 0x8d5524, 0xffdbac, 0x6b4226];
-const HAIR_COLORS = [0x1c1c1c, 0x3b2a1a, 0x6b4423, 0xb8860b, 0x4a4a4a, 0xffffff];
+const SKIN_TONES = [0xffe0bd, 0xf1c27d, 0xe0ac69, 0xc68642, 0xa9764f, 0x8d5524, 0x6b4226, 0x4a2f23];
+const HAIR_COLORS = [0x0c0c0c, 0x2b1a10, 0x4a2c14, 0x6b4423, 0x8a5a2b, 0xb8860b, 0xc9a876, 0x5c5c5c, 0xe8e8e8, 0x7a2e1d];
+const FACE_SHAPES: Array<'oval' | 'round' | 'square' | 'long' | 'heart'> = ['oval', 'round', 'square', 'long', 'heart'];
+const EYE_SHAPES: Array<'round' | 'almond' | 'sleepy' | 'wide'> = ['round', 'almond', 'sleepy', 'wide'];
+const BEARD_STYLES: Array<'none' | 'stache' | 'goatee' | 'full' | 'stubble'> = ['none', 'stache', 'goatee', 'full', 'stubble'];
 
-// A small set of deterministic, procedurally-varied cartoon faces (no image
-// assets) so each seat is visually distinct and easy to tell apart at a glance.
+function shade(color: number, amount: number): number {
+  const r = (color >> 16) & 0xff;
+  const g = (color >> 8) & 0xff;
+  const b = color & 0xff;
+  const adj = (ch: number) => Math.max(0, Math.min(255, Math.round(ch + amount)));
+  return (adj(r) << 16) | (adj(g) << 8) | adj(b);
+}
+
+// Deterministic, procedurally-varied portrait faces (no image assets) so each
+// seat is visually distinct at a glance. Draws layered shading, face-shape
+// variety, brows/eyes, and hair/beard combinations from a wide hashed palette
+// so seeds spread out across many more visually-distinct combinations than a
+// flat-color cartoon face would.
 export function drawFace(seed: string, radius: number, accent: number): Container {
   const c = new Container();
   const h = hashSeed(seed);
+  const h2 = hashSeed(seed + ':2');
+
   const skin = SKIN_TONES[h % SKIN_TONES.length];
+  const skinLight = shade(skin, 26);
+  const skinDark = shade(skin, -34);
   const hair = HAIR_COLORS[(h >> 3) % HAIR_COLORS.length];
-  const hairStyle = (h >> 6) % 4; // 0=bald, 1=short, 2=full, 3=cap
-  const hasFacialHair = (h >> 8) % 3 === 0;
-  const wearsShades = (h >> 10) % 4 === 0;
+  const hairStyle = (h >> 6) % 5; // 0=bald, 1=short, 2=full, 3=cap, 4=long/wavy
+  const beard = BEARD_STYLES[(h >> 8) % BEARD_STYLES.length];
+  const wearsShades = (h >> 10) % 5 === 0;
+  const faceShape = FACE_SHAPES[(h2 >> 2) % FACE_SHAPES.length];
+  const eyeShape = EYE_SHAPES[(h2 >> 5) % EYE_SHAPES.length];
+  const browHeavy = (h2 >> 7) % 2 === 0;
+  const eyeColor = [0x2e1e0f, 0x1a1a1a, 0x3a5a40, 0x355070][(h2 >> 9) % 4];
+  const wScale = faceShape === 'square' ? 1.06 : faceShape === 'long' ? 0.86 : faceShape === 'heart' ? 0.96 : 1;
+  const hScale = faceShape === 'long' ? 1.16 : faceShape === 'round' ? 0.92 : 1;
 
   const ring = new Graphics();
   ring.circle(0, 0, radius + 2).stroke({ width: 2, color: accent });
   c.addChild(ring);
 
-  const face = new Graphics();
-  face.circle(0, 0, radius).fill(skin);
-  c.addChild(face);
+  // Base head shape with a subtle directional light gradient approximated by
+  // two offset overlay ellipses (Pixi has no native radial-gradient fill).
+  const headW = radius * wScale;
+  const headH = radius * hScale;
+  const faceShapeG = new Graphics();
+  if (faceShape === 'square') {
+    faceShapeG.roundRect(-headW, -headH, headW * 2, headH * 2, headW * 0.35);
+  } else if (faceShape === 'heart') {
+    faceShapeG.ellipse(0, -headH * 0.15, headW, headH * 0.8);
+    faceShapeG.poly([-headW * 0.7, headH * 0.15, headW * 0.7, headH * 0.15, 0, headH * 1.05]);
+  } else {
+    faceShapeG.ellipse(0, 0, headW, headH);
+  }
+  faceShapeG.fill(skin);
+  c.addChild(faceShapeG);
 
+  const highlight = new Graphics();
+  highlight.ellipse(-headW * 0.32, -headH * 0.38, headW * 0.55, headH * 0.45).fill({ color: skinLight, alpha: 0.5 });
+  c.addChild(highlight);
+  const shadow = new Graphics();
+  shadow.ellipse(headW * 0.4, headH * 0.45, headW * 0.5, headH * 0.4).fill({ color: skinDark, alpha: 0.3 });
+  c.addChild(shadow);
+
+  // Hair (drawn after base shading, before facial features so fringe sits on top of forehead)
   if (hairStyle === 2) {
     const fullHair = new Graphics();
-    fullHair.circle(0, -radius * 0.15, radius * 1.02).fill(hair);
+    fullHair.ellipse(0, -headH * 0.25, headW * 1.06, headH * 0.95).fill(hair);
     c.addChild(fullHair);
     const reface = new Graphics();
-    reface.ellipse(0, radius * 0.18, radius * 0.92, radius * 0.85).fill(skin);
+    reface.ellipse(0, headH * 0.12, headW * 0.95, headH * 0.85).fill(skin);
     c.addChild(reface);
+    const reHighlight = new Graphics();
+    reHighlight.ellipse(-headW * 0.3, -headH * 0.1, headW * 0.5, headH * 0.4).fill({ color: skinLight, alpha: 0.4 });
+    c.addChild(reHighlight);
   } else if (hairStyle === 1) {
     const topHair = new Graphics();
-    topHair.arc(0, 0, radius * 0.95, Math.PI, 2 * Math.PI).fill(hair);
-    topHair.position.set(0, -radius * 0.05);
+    topHair.arc(0, -headH * 0.05, headW * 1.0, Math.PI * 0.95, Math.PI * 2.05).fill(hair);
     c.addChild(topHair);
   } else if (hairStyle === 3) {
     const cap = new Graphics();
-    cap.arc(0, 0, radius * 1.05, Math.PI * 1.05, Math.PI * 1.95).fill(accent);
-    cap.position.set(0, -radius * 0.1);
+    cap.arc(0, -headH * 0.1, headW * 1.08, Math.PI * 1.02, Math.PI * 1.98).fill(accent);
+    const brim = new Graphics();
+    brim.ellipse(0, -headH * 0.08, headW * 1.12, headH * 0.12).fill(shade(accent, -30));
     c.addChild(cap);
+    c.addChild(brim);
+  } else if (hairStyle === 4) {
+    const wavyHair = new Graphics();
+    wavyHair.ellipse(0, -headH * 0.22, headW * 1.05, headH * 0.9).fill(hair);
+    wavyHair.ellipse(-headW * 0.95, headH * 0.15, headW * 0.32, headH * 0.55).fill(hair);
+    wavyHair.ellipse(headW * 0.95, headH * 0.15, headW * 0.32, headH * 0.55).fill(hair);
+    c.addChild(wavyHair);
+    const reface = new Graphics();
+    reface.ellipse(0, headH * 0.1, headW * 0.92, headH * 0.85).fill(skin);
+    c.addChild(reface);
   }
 
+  // Eyebrows
+  const browY = -headH * 0.18;
+  const brows = new Graphics();
+  const browW = headW * 0.32;
+  const browWt = browHeavy ? 3.2 : 1.8;
+  brows
+    .moveTo(-headW * 0.5, browY).lineTo(-headW * 0.5 + browW, browY - headH * 0.04)
+    .stroke({ width: browWt, color: shade(hair, -10), cap: 'round' })
+    .moveTo(headW * 0.5, browY).lineTo(headW * 0.5 - browW, browY - headH * 0.04)
+    .stroke({ width: browWt, color: shade(hair, -10), cap: 'round' });
+  c.addChild(brows);
+
+  // Eyes
   if (wearsShades) {
     const shades = new Graphics();
     shades
-      .roundRect(-radius * 0.62, -radius * 0.12, radius * 0.5, radius * 0.32, 3)
-      .roundRect(radius * 0.12, -radius * 0.12, radius * 0.5, radius * 0.32, 3)
+      .roundRect(-headW * 0.62, -headH * 0.1, headW * 0.5, headH * 0.32, 3)
+      .roundRect(headW * 0.12, -headH * 0.1, headW * 0.5, headH * 0.32, 3)
       .fill(0x111111);
-    shades.moveTo(-radius * 0.12, 0).lineTo(radius * 0.12, 0).stroke({ width: 1.5, color: 0x111111 });
+    shades.moveTo(-headW * 0.12, headH * 0.02).lineTo(headW * 0.12, headH * 0.02).stroke({ width: 1.5, color: 0x111111 });
     c.addChild(shades);
   } else {
-    const eyes = new Graphics();
-    eyes.circle(-radius * 0.35, -radius * 0.05, radius * 0.1).circle(radius * 0.35, -radius * 0.05, radius * 0.1).fill(0x1a1a1a);
-    c.addChild(eyes);
+    const eyeY = eyeShape === 'sleepy' ? headH * 0.02 : -headH * 0.02;
+    const eyeRx = eyeShape === 'wide' ? headW * 0.13 : headW * 0.1;
+    const eyeRy = eyeShape === 'almond' ? headH * 0.06 : eyeShape === 'sleepy' ? headH * 0.045 : headH * 0.08;
+    const whites = new Graphics();
+    whites.ellipse(-headW * 0.32, eyeY, eyeRx, eyeRy).ellipse(headW * 0.32, eyeY, eyeRx, eyeRy).fill(0xffffff);
+    c.addChild(whites);
+    const pupils = new Graphics();
+    pupils.circle(-headW * 0.32, eyeY, eyeRy * 0.6).circle(headW * 0.32, eyeY, eyeRy * 0.6).fill(eyeColor);
+    c.addChild(pupils);
+    if (eyeShape === 'sleepy') {
+      const lids = new Graphics();
+      lids
+        .moveTo(-headW * 0.45, eyeY - eyeRy * 0.6).lineTo(-headW * 0.18, eyeY - eyeRy * 0.6)
+        .moveTo(headW * 0.18, eyeY - eyeRy * 0.6).lineTo(headW * 0.45, eyeY - eyeRy * 0.6)
+        .stroke({ width: 1.5, color: skinDark, alpha: 0.5 });
+      c.addChild(lids);
+    }
   }
 
+  // Nose (subtle line shading, no flat circle)
+  const nose = new Graphics();
+  nose.moveTo(0, -headH * 0.02).lineTo(-headW * 0.06, headH * 0.18).lineTo(headW * 0.06, headH * 0.18 + 1);
+  nose.stroke({ width: 1.2, color: skinDark, alpha: 0.55, cap: 'round' });
+  c.addChild(nose);
+
+  // Mouth
   const mouth = new Graphics();
-  mouth.moveTo(-radius * 0.32, radius * 0.42).quadraticCurveTo(0, radius * 0.58, radius * 0.32, radius * 0.42);
-  mouth.stroke({ width: radius * 0.1, color: 0x7a3b2e, cap: 'round' });
+  mouth.moveTo(-headW * 0.3, headH * 0.5).quadraticCurveTo(0, headH * 0.62, headW * 0.3, headH * 0.5);
+  mouth.stroke({ width: headW * 0.09, color: 0x8a3b34, cap: 'round' });
   c.addChild(mouth);
 
-  if (hasFacialHair) {
+  // Facial hair
+  if (beard === 'stache') {
     const stache = new Graphics();
-    stache.roundRect(-radius * 0.3, radius * 0.2, radius * 0.6, radius * 0.16, 3).fill(hair);
+    stache.roundRect(-headW * 0.28, headH * 0.32, headW * 0.56, headH * 0.13, 3).fill(hair);
     c.addChild(stache);
+  } else if (beard === 'goatee') {
+    const goatee = new Graphics();
+    goatee.roundRect(-headW * 0.16, headH * 0.55, headW * 0.32, headH * 0.32, headW * 0.12).fill(hair);
+    c.addChild(goatee);
+  } else if (beard === 'full') {
+    const full = new Graphics();
+    full.ellipse(0, headH * 0.55, headW * 0.78, headH * 0.55).fill({ color: hair, alpha: 0.95 });
+    const cutout = new Graphics();
+    cutout.ellipse(0, headH * 0.42, headW * 0.5, headH * 0.28).fill(skin);
+    c.addChild(full);
+    c.addChild(cutout);
+  } else if (beard === 'stubble') {
+    const stubble = new Graphics();
+    stubble.ellipse(0, headH * 0.58, headW * 0.65, headH * 0.42).fill({ color: hair, alpha: 0.22 });
+    c.addChild(stubble);
   }
 
   return c;
