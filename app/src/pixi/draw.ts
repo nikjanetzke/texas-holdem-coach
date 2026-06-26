@@ -82,17 +82,78 @@ export function drawChipStack(amount: number): Container {
   return c;
 }
 
-export function drawAvatar(initial: string, radius: number, accent: number): Container {
-  const c = new Container();
-  const g = new Graphics();
-  g.circle(0, 0, radius).fill(0x1c2531).stroke({ width: 2, color: accent });
-  g.circle(0, 0, radius - 3).fill({ color: accent, alpha: 0.12 });
-  c.addChild(g);
+function hashSeed(seed: string): number {
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
+  return h;
+}
 
-  const style = new TextStyle({ fontFamily: 'system-ui, sans-serif', fontSize: radius, fontWeight: 'bold', fill: 0xe5e7eb });
-  const text = new Text({ text: initial.toUpperCase(), style });
-  text.anchor.set(0.5);
-  c.addChild(text);
+const SKIN_TONES = [0xf1c27d, 0xe0ac69, 0xc68642, 0x8d5524, 0xffdbac, 0x6b4226];
+const HAIR_COLORS = [0x1c1c1c, 0x3b2a1a, 0x6b4423, 0xb8860b, 0x4a4a4a, 0xffffff];
+
+// A small set of deterministic, procedurally-varied cartoon faces (no image
+// assets) so each seat is visually distinct and easy to tell apart at a glance.
+export function drawFace(seed: string, radius: number, accent: number): Container {
+  const c = new Container();
+  const h = hashSeed(seed);
+  const skin = SKIN_TONES[h % SKIN_TONES.length];
+  const hair = HAIR_COLORS[(h >> 3) % HAIR_COLORS.length];
+  const hairStyle = (h >> 6) % 4; // 0=bald, 1=short, 2=full, 3=cap
+  const hasFacialHair = (h >> 8) % 3 === 0;
+  const wearsShades = (h >> 10) % 4 === 0;
+
+  const ring = new Graphics();
+  ring.circle(0, 0, radius + 2).stroke({ width: 2, color: accent });
+  c.addChild(ring);
+
+  const face = new Graphics();
+  face.circle(0, 0, radius).fill(skin);
+  c.addChild(face);
+
+  if (hairStyle === 2) {
+    const fullHair = new Graphics();
+    fullHair.circle(0, -radius * 0.15, radius * 1.02).fill(hair);
+    c.addChild(fullHair);
+    const reface = new Graphics();
+    reface.ellipse(0, radius * 0.18, radius * 0.92, radius * 0.85).fill(skin);
+    c.addChild(reface);
+  } else if (hairStyle === 1) {
+    const topHair = new Graphics();
+    topHair.arc(0, 0, radius * 0.95, Math.PI, 2 * Math.PI).fill(hair);
+    topHair.position.set(0, -radius * 0.05);
+    c.addChild(topHair);
+  } else if (hairStyle === 3) {
+    const cap = new Graphics();
+    cap.arc(0, 0, radius * 1.05, Math.PI * 1.05, Math.PI * 1.95).fill(accent);
+    cap.position.set(0, -radius * 0.1);
+    c.addChild(cap);
+  }
+
+  if (wearsShades) {
+    const shades = new Graphics();
+    shades
+      .roundRect(-radius * 0.62, -radius * 0.12, radius * 0.5, radius * 0.32, 3)
+      .roundRect(radius * 0.12, -radius * 0.12, radius * 0.5, radius * 0.32, 3)
+      .fill(0x111111);
+    shades.moveTo(-radius * 0.12, 0).lineTo(radius * 0.12, 0).stroke({ width: 1.5, color: 0x111111 });
+    c.addChild(shades);
+  } else {
+    const eyes = new Graphics();
+    eyes.circle(-radius * 0.35, -radius * 0.05, radius * 0.1).circle(radius * 0.35, -radius * 0.05, radius * 0.1).fill(0x1a1a1a);
+    c.addChild(eyes);
+  }
+
+  const mouth = new Graphics();
+  mouth.moveTo(-radius * 0.32, radius * 0.42).quadraticCurveTo(0, radius * 0.58, radius * 0.32, radius * 0.42);
+  mouth.stroke({ width: radius * 0.1, color: 0x7a3b2e, cap: 'round' });
+  c.addChild(mouth);
+
+  if (hasFacialHair) {
+    const stache = new Graphics();
+    stache.roundRect(-radius * 0.3, radius * 0.2, radius * 0.6, radius * 0.16, 3).fill(hair);
+    c.addChild(stache);
+  }
+
   return c;
 }
 

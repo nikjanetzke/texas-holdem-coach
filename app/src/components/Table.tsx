@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { GameSetup } from '../hooks/useGame';
 import { useGame } from '../hooks/useGame';
 import { HandHistoryPanel } from './HandHistoryPanel';
@@ -41,6 +41,25 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
   const [muted, setMuted] = useState(soundManager.muted);
   const lastLoggedActionCount = useRef(0);
   const lastHandOverSignaled = useRef(false);
+  const feltObserverRef = useRef<ResizeObserver | null>(null);
+  const [canvasSize, setCanvasSize] = useState({ width: 880, height: 500 });
+
+  // A callback ref (rather than useEffect on an empty-dep useRef) because the
+  // felt div doesn't exist on the very first render — `engine` starts out
+  // null until useGame's setup effect runs, so this node mounts late.
+  const feltRef = useCallback((el: HTMLDivElement | null) => {
+    feltObserverRef.current?.disconnect();
+    feltObserverRef.current = null;
+    if (!el) return;
+    const update = (width: number) => {
+      const w = Math.max(320, Math.floor(width));
+      setCanvasSize((prev) => (prev.width === w ? prev : { width: w, height: Math.round(w * (500 / 880)) }));
+    };
+    update(el.clientWidth);
+    const observer = new ResizeObserver((entries) => update(entries[0].contentRect.width));
+    observer.observe(el);
+    feltObserverRef.current = observer;
+  }, []);
 
   const validActions =
     engine && !engine.isHandOver() && currentActorId === 'human' ? engine.getValidActions('human') : null;
@@ -96,22 +115,21 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
 
   const sbPlayerId = engine.smallBlindId;
   const bbPlayerId = engine.bigBlindId;
-  const canvasSize = { width: 880, height: 500 };
 
   return (
-    <div className="mx-auto flex min-h-screen max-w-5xl flex-col px-4 py-3">
+    <div className="mx-auto flex min-h-screen max-w-5xl flex-col overflow-x-hidden px-3 py-3 sm:px-4">
       {/* Top bar */}
-      <div className="mb-3 flex items-center justify-between text-sm text-slate-300">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-sm text-slate-300">
         <button onClick={onExit} className="rounded px-2 py-1 text-slate-400 hover:bg-slate-800 hover:text-slate-100">
           ← Setup
         </button>
-        <div className="flex items-center gap-4">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
           <span>Hand #{handNumber}</span>
           {setup.scenarioName && (
             <span className="rounded-full bg-purple-900/60 px-3 py-1 text-xs text-purple-200">{setup.scenarioName}</span>
           )}
           <span className="rounded-full bg-slate-800 px-3 py-1 capitalize text-emerald-300">{engine.street}</span>
-          <div className="flex items-center gap-2" title={nextLevel ? `Next: ${nextLevel.smallBlind}/${nextLevel.bigBlind}` : 'Top level reached'}>
+          <div className="flex flex-wrap items-center gap-2" title={nextLevel ? `Next: ${nextLevel.smallBlind}/${nextLevel.bigBlind}` : 'Top level reached'}>
             <span>
               Blinds {currentLevel.smallBlind}/{currentLevel.bigBlind}
               {currentLevel.ante > 0 && <span className="text-slate-400"> (ante {currentLevel.ante})</span>}
@@ -142,7 +160,7 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
       </div>
 
       {/* Felt */}
-      <div className="mx-auto w-full max-w-4xl overflow-hidden">
+      <div ref={feltRef} className="mx-auto w-full max-w-4xl overflow-hidden">
         <PokerCanvas
           width={canvasSize.width}
           height={canvasSize.height}

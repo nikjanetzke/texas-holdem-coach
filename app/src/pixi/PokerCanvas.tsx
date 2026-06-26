@@ -3,7 +3,7 @@ import { Application, Container, Graphics, Text, TextStyle } from 'pixi.js';
 import type { Card } from '../engine/deck';
 import type { HandPlayer } from '../engine/game';
 import * as theme from './theme';
-import { drawAvatar, drawBadge, drawCardBack, drawCardFace, drawChipStack, CARD_W, CARD_H, CARD_W_SM, CARD_H_SM } from './draw';
+import { drawFace, drawBadge, drawCardBack, drawCardFace, drawChipStack, CARD_W, CARD_H, CARD_W_SM, CARD_H_SM } from './draw';
 
 export interface SeatViewModel {
   player: HandPlayer;
@@ -60,17 +60,40 @@ function drawFelt(w: number, h: number): Container {
   return c;
 }
 
-export function PokerCanvas({ seats, communityCards, potTotal, width = 900, height = 520 }: PokerCanvasProps) {
+const LOGICAL_W = 880;
+const LOGICAL_H = 500;
+
+export function PokerCanvas({ seats, communityCards, potTotal, width = LOGICAL_W, height = LOGICAL_H }: PokerCanvasProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<Application | null>(null);
   const sceneRef = useRef<Container | null>(null);
+  // Kept in sync every render so the async app.init() callback can pick up
+  // the latest size even if width/height changed while init() was pending —
+  // otherwise a resize that races ahead of init() completing gets dropped.
+  const sizeRef = useRef({ width, height });
+  sizeRef.current = { width, height };
 
+  function applySize(app: Application, scene: Container, w: number, h: number) {
+    app.renderer.resize(w, h);
+    app.canvas.style.width = `${w}px`;
+    app.canvas.style.height = `${h}px`;
+    scene.scale.set(w / LOGICAL_W, h / LOGICAL_H);
+  }
+
+  // Mount the Pixi application once; resizing is handled separately by scaling
+  // a fixed-logical-size scene to fit the actual canvas dimensions.
   useEffect(() => {
     let destroyed = false;
     const app = new Application();
     appRef.current = app;
     (async () => {
-      await app.init({ width, height, backgroundAlpha: 0, antialias: true, resolution: Math.min(window.devicePixelRatio || 1, 2) });
+      await app.init({
+        width: sizeRef.current.width,
+        height: sizeRef.current.height,
+        backgroundAlpha: 0,
+        antialias: true,
+        resolution: Math.min(window.devicePixelRatio || 1, 2),
+      });
       if (destroyed) {
         app.destroy(true);
         return;
@@ -79,6 +102,8 @@ export function PokerCanvas({ seats, communityCards, potTotal, width = 900, heig
       const scene = new Container();
       app.stage.addChild(scene);
       sceneRef.current = scene;
+      // Pick up the latest width/height in case they changed while init() was pending.
+      applySize(app, scene, sizeRef.current.width, sizeRef.current.height);
       renderScene();
     })();
 
@@ -90,29 +115,39 @@ export function PokerCanvas({ seats, communityCards, potTotal, width = 900, heig
       if (a && a.renderer) a.destroy(true);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Resize the renderer + rescale the logical-coordinate scene to fit, instead
+  // of rebuilding the whole Pixi application on every container resize.
+  useEffect(() => {
+    const app = appRef.current;
+    const scene = sceneRef.current;
+    if (!app || !app.renderer || !scene) return;
+    applySize(app, scene, width, height);
   }, [width, height]);
 
   function renderScene() {
     const scene = sceneRef.current;
     if (!scene) return;
     scene.removeChildren();
+    scene.scale.set(width / LOGICAL_W, height / LOGICAL_H);
 
-    scene.addChild(drawFelt(width, height));
+    scene.addChild(drawFelt(LOGICAL_W, LOGICAL_H));
 
     // Community cards
     const board = new Container();
     const cardGap = CARD_W + 8;
-    const startX = width / 2 - (communityCards.length * cardGap) / 2 + cardGap / 2;
+    const startX = LOGICAL_W / 2 - (communityCards.length * cardGap) / 2 + cardGap / 2;
     communityCards.forEach((card, i) => {
       const card3d = drawCardFace(card);
-      card3d.position.set(startX + i * cardGap - CARD_W / 2, height * 0.38 - CARD_H / 2);
+      card3d.position.set(startX + i * cardGap - CARD_W / 2, LOGICAL_H * 0.38 - CARD_H / 2);
       board.addChild(card3d);
     });
     if (communityCards.length === 0) {
       const style = new TextStyle({ fontFamily: 'Georgia, serif', fontSize: 14, fill: 0x9fe3bd, fontStyle: 'italic' });
       const t = new Text({ text: '— pre-flop —', style });
       t.anchor.set(0.5);
-      t.position.set(width / 2, height * 0.38);
+      t.position.set(LOGICAL_W / 2, LOGICAL_H * 0.38);
       board.addChild(t);
     }
     scene.addChild(board);
@@ -128,12 +163,12 @@ export function PokerCanvas({ seats, communityCards, potTotal, width = 900, heig
     potG.roundRect(-potW / 2, -12, potW, 24, 12).fill({ color: 0x000000, alpha: 0.55 }).stroke({ width: 1, color: theme.GOLD, alpha: 0.5 });
     const potContainer = new Container();
     potContainer.addChild(potG, potLabel);
-    potContainer.position.set(width / 2, height * 0.52);
+    potContainer.position.set(LOGICAL_W / 2, LOGICAL_H * 0.52);
     scene.addChild(potContainer);
 
     const total = seats.length;
     seats.forEach((seat, idx) => {
-      const pos = seatPosition(idx, total, width, height);
+      const pos = seatPosition(idx, total, LOGICAL_W, LOGICAL_H);
       scene.addChild(buildSeatNode(seat, pos.x, pos.y));
       if (seat.player.streetContributed > 0) {
         const chips = drawChipStack(seat.player.streetContributed);
@@ -157,7 +192,7 @@ export function PokerCanvas({ seats, communityCards, potTotal, width = 900, heig
     if (player.folded) panel.alpha = 0.45;
     c.addChild(panel);
 
-    const avatar = drawAvatar(player.name.charAt(0), 14, isActing ? theme.ACTING_RING : 0x475569);
+    const avatar = drawFace(player.id, 14, isActing ? theme.ACTING_RING : 0x475569);
     avatar.position.set(-boxW / 2 + 16, -boxH / 2 + 16);
     c.addChild(avatar);
 

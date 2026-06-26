@@ -1,6 +1,6 @@
-// Tiny WAV synthesizer: builds short sound effects in-memory as data URIs so the
-// app ships with no binary audio assets. Each effect is a small sequence of
-// tones/noise envelopes mixed into a mono 16-bit PCM buffer.
+// Tiny WAV synthesizer: builds short, ADSR-shaped sound effects in-memory as
+// data URIs so the app ships with no binary audio assets. Each effect is a
+// small set of tones/filtered-noise hits mixed into a mono 16-bit PCM buffer.
 
 interface Tone {
   freq: number;
@@ -8,38 +8,62 @@ interface Tone {
   durMs: number;
   type?: 'sine' | 'triangle' | 'square' | 'noise';
   gain?: number;
+  /** Extra overtone mix (0-1) for a richer, less "beepy" tone. Sine/triangle only. */
+  overtone?: number;
+  /** Lowpass smoothing amount for noise (0 = harsh static, 1 = dull thud). */
+  smooth?: number;
+  /** Pitch glide target — if set, freq sweeps from `freq` to this over durMs. */
+  glideTo?: number;
 }
 
-function renderTones(tones: Tone[], totalMs: number, sampleRate = 22050): Float32Array {
+function envelopeAt(i: number, durSamples: number, attackSamples: number): number {
+  if (i < attackSamples) return i / attackSamples;
+  const t = (i - attackSamples) / (durSamples - attackSamples || 1);
+  return Math.exp(-t * 4.5); // exponential decay tail, avoids the "synth beep" sine-window sound
+}
+
+function renderTones(tones: Tone[], totalMs: number, sampleRate = 44100): Float32Array {
   const totalSamples = Math.ceil((totalMs / 1000) * sampleRate);
   const buffer = new Float32Array(totalSamples);
 
   for (const tone of tones) {
     const startSample = Math.floor((tone.startMs / 1000) * sampleRate);
     const durSamples = Math.floor((tone.durMs / 1000) * sampleRate);
+    const attackSamples = Math.max(1, Math.min(durSamples * 0.15, sampleRate * 0.006));
     const gain = tone.gain ?? 0.3;
     const type = tone.type ?? 'sine';
+    const overtone = tone.overtone ?? 0;
+    let prevNoise = 0;
+
     for (let i = 0; i < durSamples; i++) {
       const idx = startSample + i;
       if (idx >= totalSamples) break;
       const t = i / sampleRate;
-      const envelope = Math.sin((Math.PI * i) / durSamples); // smooth in/out, avoids clicks
+      const env = envelopeAt(i, durSamples, attackSamples);
       let sample: number;
+
       if (type === 'noise') {
-        sample = Math.random() * 2 - 1;
-      } else if (type === 'square') {
-        sample = Math.sign(Math.sin(2 * Math.PI * tone.freq * t));
-      } else if (type === 'triangle') {
-        const phase = (tone.freq * t) % 1;
-        sample = 4 * Math.abs(phase - 0.5) - 1;
+        const raw = Math.random() * 2 - 1;
+        const smooth = tone.smooth ?? 0.6;
+        prevNoise = prevNoise * smooth + raw * (1 - smooth);
+        sample = prevNoise;
       } else {
-        sample = Math.sin(2 * Math.PI * tone.freq * t);
+        const freq = tone.glideTo ? tone.freq + (tone.glideTo - tone.freq) * (i / durSamples) : tone.freq;
+        if (type === 'square') {
+          sample = Math.sign(Math.sin(2 * Math.PI * freq * t));
+        } else if (type === 'triangle') {
+          const phase = (freq * t) % 1;
+          sample = 4 * Math.abs(phase - 0.5) - 1;
+        } else {
+          sample = Math.sin(2 * Math.PI * freq * t);
+          if (overtone > 0) sample += overtone * Math.sin(2 * Math.PI * freq * 2 * t);
+          if (overtone > 0) sample /= 1 + overtone;
+        }
       }
-      buffer[idx] += sample * gain * envelope;
+      buffer[idx] += sample * gain * env;
     }
   }
 
-  // Normalize to avoid clipping if tones overlap.
   let max = 0;
   for (const v of buffer) max = Math.max(max, Math.abs(v));
   if (max > 1) for (let i = 0; i < buffer.length; i++) buffer[i] /= max;
@@ -47,9 +71,8 @@ function renderTones(tones: Tone[], totalMs: number, sampleRate = 22050): Float3
   return buffer;
 }
 
-function floatToWavDataUri(samples: Float32Array, sampleRate = 22050): string {
+function floatToWavDataUri(samples: Float32Array, sampleRate: number): string {
   const bytesPerSample = 2;
-  const blockAlign = bytesPerSample;
   const dataSize = samples.length * bytesPerSample;
   const buffer = new ArrayBuffer(44 + dataSize);
   const view = new DataView(buffer);
@@ -63,11 +86,11 @@ function floatToWavDataUri(samples: Float32Array, sampleRate = 22050): string {
   writeStr(8, 'WAVE');
   writeStr(12, 'fmt ');
   view.setUint32(16, 16, true);
-  view.setUint16(20, 1, true); // PCM
-  view.setUint16(22, 1, true); // mono
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
   view.setUint32(24, sampleRate, true);
-  view.setUint32(28, sampleRate * blockAlign, true);
-  view.setUint16(32, blockAlign, true);
+  view.setUint32(28, sampleRate * bytesPerSample, true);
+  view.setUint16(32, bytesPerSample, true);
   view.setUint16(34, 16, true);
   writeStr(36, 'data');
   view.setUint32(40, dataSize, true);
@@ -89,5 +112,6 @@ function floatToWavDataUri(samples: Float32Array, sampleRate = 22050): string {
 }
 
 export function synthSfx(tones: Tone[], totalMs: number): string {
-  return floatToWavDataUri(renderTones(tones, totalMs), 22050);
+  const sampleRate = 44100;
+  return floatToWavDataUri(renderTones(tones, totalMs, sampleRate), sampleRate);
 }
