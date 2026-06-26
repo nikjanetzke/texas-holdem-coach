@@ -294,7 +294,13 @@ export function PokerCanvas({ seats, communityCards, potTotal, width = LOGICAL_W
   }
 
   useEffect(() => {
-    renderScene();
+    // A draw error must never crash the React tree (and white-screen the game);
+    // worst case the canvas skips a frame and redraws on the next state change.
+    try {
+      renderScene();
+    } catch (err) {
+      console.error('PokerCanvas render error', err);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [seats, communityCards, potTotal, width, height]);
 

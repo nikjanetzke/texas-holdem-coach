@@ -7,6 +7,8 @@ import { HAND_RANK_NAMES } from '../engine/evaluator';
 import type { ActionType } from '../engine/betting';
 import { PokerCanvas } from '../pixi/PokerCanvas';
 import { soundManager, type SfxName } from '../sound/SoundManager';
+import { chenScore } from '../engine/preflop';
+import type { Card } from '../engine/deck';
 
 const ACTION_SOUND: Record<ActionType, SfxName> = {
   fold: 'fold',
@@ -43,6 +45,12 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
   const lastLoggedActionCount = useRef(0);
   const lastHandOverSignaled = useRef(false);
   const [speechByPlayer, setSpeechByPlayer] = useState<Record<string, string>>({});
+  // Coach suggestion is hidden behind a reveal so you can commit to your own
+  // read first; resets each turn. `heldAdvice` keeps the last suggestion around
+  // for the rest of the hand so toggling the coach on after you fold still shows it.
+  const [coachRevealed, setCoachRevealed] = useState(false);
+  const [heldAdvice, setHeldAdvice] = useState<typeof advice>(null);
+  const [showCardRating, setShowCardRating] = useState(false);
   const feltObserverRef = useRef<ResizeObserver | null>(null);
   const [canvasSize, setCanvasSize] = useState({ width: 880, height: 500 });
 
@@ -104,6 +112,22 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
       lastHandOverSignaled.current = false;
     }
   });
+
+  // Hold onto the latest advice so it survives past your own turn within a hand.
+  useEffect(() => {
+    if (advice) setHeldAdvice(advice);
+  }, [advice]);
+
+  // New hand: clear the held suggestion and re-arm the reveal gate.
+  useEffect(() => {
+    setHeldAdvice(null);
+    setCoachRevealed(false);
+  }, [handNumber]);
+
+  // Re-arm the reveal each time it becomes the human's turn again.
+  useEffect(() => {
+    if (currentActorId === 'human') setCoachRevealed(false);
+  }, [currentActorId]);
 
   function toggleMuted() {
     const next = !muted;
@@ -200,30 +224,56 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
         />
       </div>
 
-      {/* Coach panel */}
-      {coachEnabled && advice && currentActorId === 'human' && !isHandOver && (
-        <div className="animate-fade-up mt-4 rounded-xl border border-indigo-500/40 bg-indigo-950/40 p-3 text-sm text-slate-200">
-          <div className="mb-2 flex flex-wrap items-center gap-2">
-            <span className="rounded bg-indigo-600 px-2 py-0.5 text-xs font-bold uppercase tracking-wide">Coach</span>
-            <span className="font-semibold">
-              Suggests: <span className="text-amber-300 capitalize">{advice.suggestedAction}</span>
-            </span>
-            <Stat label="Hand" value={advice.handStrengthLabel} />
-            <Stat label="Equity" value={`${advice.equityPercent.toFixed(0)}%`} />
-            <Stat label="Pot odds" value={`${advice.potOddsPercent.toFixed(0)}%`} />
-          </div>
-          <ul className="list-inside list-disc space-y-0.5 text-slate-300">
-            {advice.reasoning.map((r, i) => (
-              <li key={i}>{r}</li>
-            ))}
-          </ul>
-          {advice.warnings.map((w, i) => (
-            <div key={i} className="mt-1 text-amber-400">
-              ⚠ {w}
-            </div>
-          ))}
-        </div>
+      {/* Starting-hand rating (click to expand) */}
+      {engine.street === 'preflop' && human.holeCards.length === 2 && !isHandOver && (
+        <StartingHandRating cards={human.holeCards} open={showCardRating} onToggle={() => setShowCardRating((v) => !v)} />
       )}
+
+      {/* Coach panel */}
+      {coachEnabled && (() => {
+        const liveTurn = currentActorId === 'human' && !isHandOver;
+        // While it's your turn, keep the suggestion hidden until you reveal it so
+        // you can commit to your own decision first. After you've acted (or folded),
+        // fall back to the held suggestion so it's still visible.
+        if (liveTurn && advice && !coachRevealed) {
+          return (
+            <div className="animate-fade-up mt-4 flex items-center justify-between gap-3 rounded-xl border border-indigo-500/40 bg-indigo-950/40 p-3 text-sm text-slate-300">
+              <span>Decide your play first — then check the coach's take.</span>
+              <button
+                onClick={() => setCoachRevealed(true)}
+                className="shrink-0 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-500"
+              >
+                Reveal suggestion
+              </button>
+            </div>
+          );
+        }
+        const shown = liveTurn ? advice : heldAdvice;
+        if (!shown) return null;
+        return (
+          <div className="animate-fade-up mt-4 rounded-xl border border-indigo-500/40 bg-indigo-950/40 p-3 text-sm text-slate-200">
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              <span className="rounded bg-indigo-600 px-2 py-0.5 text-xs font-bold uppercase tracking-wide">Coach</span>
+              <span className="font-semibold">
+                Suggests: <span className="text-amber-300 capitalize">{shown.suggestedAction}</span>
+              </span>
+              <Stat label="Hand" value={shown.handStrengthLabel} />
+              <Stat label="Equity" value={`${shown.equityPercent.toFixed(0)}%`} />
+              <Stat label="Pot odds" value={`${shown.potOddsPercent.toFixed(0)}%`} />
+            </div>
+            <ul className="list-inside list-disc space-y-0.5 text-slate-300">
+              {shown.reasoning.map((r, i) => (
+                <li key={i}>{r}</li>
+              ))}
+            </ul>
+            {shown.warnings.map((w, i) => (
+              <div key={i} className="mt-1 text-amber-400">
+                ⚠ {w}
+              </div>
+            ))}
+          </div>
+        );
+      })()}
 
       {/* Action bar */}
       {validActions && (
@@ -273,6 +323,19 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
               <ActionButton label={`Raise to ${raiseAmount}`} tone="primary" onClick={() => humanAct('raise', raiseAmount)} />
             )}
           </div>
+        </div>
+      )}
+
+      {/* Skip ahead once you've folded — no need to watch the bots finish. */}
+      {!isHandOver && !validActions && human.folded && (
+        <div className="animate-fade-up mt-4 flex items-center justify-between gap-3 rounded-xl border border-slate-700 bg-slate-900/80 p-3 text-sm text-slate-300">
+          <span>You folded — waiting on the other players.</span>
+          <button
+            onClick={nextHand}
+            className="shrink-0 rounded-lg bg-emerald-600 px-4 py-2 font-semibold text-white hover:bg-emerald-500"
+          >
+            Skip to next hand →
+          </button>
         </div>
       )}
 
@@ -340,6 +403,49 @@ function formatClock(ms: number): string {
 function clamp(value: number, valid: { minRaiseTo: number; maxRaiseTo: number; types: ActionType[] }, bb: number) {
   const min = valid.types.includes('raise') ? valid.minRaiseTo : bb;
   return Math.max(min, Math.min(valid.maxRaiseTo, value));
+}
+
+function chenLabel(score: number): { label: string; tone: string } {
+  if (score >= 10) return { label: 'Premium', tone: 'text-emerald-400' };
+  if (score >= 8) return { label: 'Strong', tone: 'text-emerald-300' };
+  if (score >= 6) return { label: 'Playable', tone: 'text-amber-300' };
+  if (score >= 4) return { label: 'Marginal', tone: 'text-orange-300' };
+  return { label: 'Weak', tone: 'text-rose-400' };
+}
+
+const SUIT_CHARS: Record<Card['suit'], string> = { s: '♠', h: '♥', d: '♦', c: '♣' };
+
+function StartingHandRating({ cards, open, onToggle }: { cards: Card[]; open: boolean; onToggle: () => void }) {
+  const score = chenScore(cards);
+  const { label, tone } = chenLabel(score);
+  const text = cards.map((c) => `${c.rank}${SUIT_CHARS[c.suit]}`).join(' ');
+  return (
+    <div className="mt-4 rounded-xl border border-slate-700 bg-slate-900/60 text-sm">
+      <button onClick={onToggle} className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left">
+        <span className="flex items-center gap-2">
+          <span className="font-semibold text-slate-200">Starting hand</span>
+          <span className="font-mono text-slate-300">{text}</span>
+          <span className={`font-semibold ${tone}`}>{label}</span>
+          <span className="text-xs text-slate-500">(Chen {score})</span>
+        </span>
+        <span className="text-slate-500">{open ? '▲' : '▼'}</span>
+      </button>
+      {open && (
+        <div className="border-t border-slate-800 px-3 py-2 text-xs text-slate-400">
+          <p className="mb-1">
+            This uses the <span className="text-slate-300">Chen formula</span>, a quick way to score a starting hand:
+          </p>
+          <ul className="list-inside list-disc space-y-0.5">
+            <li>High card points: A=10, K=8, Q=7, J=6, others = rank ÷ 2.</li>
+            <li>Pairs double the card value (minimum 5).</li>
+            <li>+2 if suited; subtract points for gaps between the two cards.</li>
+            <li>+1 for low connectors that can make straights.</li>
+          </ul>
+          <p className="mt-1">Roughly: 10+ premium, 8–9 strong, 6–7 playable, 4–5 marginal, below 4 is best folded from most spots.</p>
+        </div>
+      )}
+    </div>
+  );
 }
 
 function Stat({ label, value }: { label: string; value: string }) {

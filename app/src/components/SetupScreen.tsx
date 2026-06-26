@@ -6,8 +6,10 @@ import { SCENARIOS } from '../scenarios/scenarios';
 
 export function SetupScreen({ onStart }: { onStart: (setup: GameSetup) => void }) {
   const [mode, setMode] = useState<'quick' | 'scenario'>('quick');
-  const [numPlayers, setNumPlayers] = useState(6);
-  const [startingStack, setStartingStack] = useState(1000);
+  // Kept as strings so the fields can be cleared while typing (a numeric state
+  // floored at the min would otherwise pin them at "0" and refuse to empty).
+  const [numPlayers, setNumPlayers] = useState('6');
+  const [startingStack, setStartingStack] = useState('1000');
   const [scheduleId, setScheduleId] = useState(DEFAULT_SCHEDULE_ID);
   const [actionTimerSeconds, setActionTimerSeconds] = useState<number | null>(null);
 
@@ -67,6 +69,14 @@ export function SetupScreen({ onStart }: { onStart: (setup: GameSetup) => void }
   );
 }
 
+// Parse a possibly-empty/garbage input string, falling back to `fallback` and
+// clamping into [min, max].
+function clampInt(value: string, min: number, max: number, fallback: number): number {
+  const n = Number(value);
+  if (!Number.isFinite(n) || value.trim() === '') return fallback;
+  return Math.min(max, Math.max(min, Math.round(n)));
+}
+
 function ModeTab({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
   return (
     <button
@@ -91,10 +101,10 @@ function QuickGameForm({
   setActionTimerSeconds,
   onStart,
 }: {
-  numPlayers: number;
-  setNumPlayers: (n: number) => void;
-  startingStack: number;
-  setStartingStack: (n: number) => void;
+  numPlayers: string;
+  setNumPlayers: (n: string) => void;
+  startingStack: string;
+  setStartingStack: (n: string) => void;
   scheduleId: string;
   setScheduleId: (id: string) => void;
   actionTimerSeconds: number | null;
@@ -110,7 +120,8 @@ function QuickGameForm({
           min={2}
           max={10}
           value={numPlayers}
-          onChange={(e) => setNumPlayers(Math.min(10, Math.max(2, Number(e.target.value))))}
+          onChange={(e) => setNumPlayers(e.target.value)}
+          onBlur={(e) => setNumPlayers(String(clampInt(e.target.value, 2, 10, 6)))}
           className="w-full rounded bg-slate-800 border border-slate-600 px-3 py-2"
         />
       </label>
@@ -122,7 +133,8 @@ function QuickGameForm({
           min={100}
           step={100}
           value={startingStack}
-          onChange={(e) => setStartingStack(Number(e.target.value))}
+          onChange={(e) => setStartingStack(e.target.value)}
+          onBlur={(e) => setStartingStack(String(clampInt(e.target.value, 100, 1_000_000, 1000)))}
           className="w-full rounded bg-slate-800 border border-slate-600 px-3 py-2"
         />
       </label>
@@ -189,8 +201,8 @@ function QuickGameForm({
         className="w-full rounded bg-emerald-600 hover:bg-emerald-500 transition-colors py-2 font-semibold"
         onClick={() =>
           onStart({
-            seats: buildDefaultSeats(numPlayers),
-            startingStack,
+            seats: buildDefaultSeats(clampInt(numPlayers, 2, 10, 6)),
+            startingStack: clampInt(startingStack, 100, 1_000_000, 1000),
             scheduleId,
             actionTimerSeconds: actionTimerSeconds ?? undefined,
           })

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { HandEngine } from '../engine/game';
 import type { ActionLogEntry, HandPlayer, ShowdownResult, Street } from '../engine/game';
 import type { Card } from '../engine/deck';
@@ -161,7 +161,10 @@ export function useGame(setup: GameSetup) {
 
   const potTotal = engine ? engine.players.reduce((sum, p) => sum + p.totalContributed, 0) : 0;
 
-  const seatConfigById = Object.fromEntries(setup.seats.map((s) => [s.id, s]));
+  // Memoized so its identity is stable across the once-a-second clock re-render.
+  // Otherwise the AI-turn effect (which depends on it) re-runs every tick and
+  // clears/re-rolls the pending bot timer, stalling the table.
+  const seatConfigById = useMemo(() => Object.fromEntries(setup.seats.map((s) => [s.id, s])), [setup.seats]);
 
   const currentActorId = engine?.getCurrentActorId() ?? null;
 
@@ -236,7 +239,10 @@ export function useGame(setup: GameSetup) {
     }, BOT_DELAY_MIN_MS + Math.random() * (BOT_DELAY_MAX_MS - BOT_DELAY_MIN_MS));
 
     return () => clearTimeout(timer);
-  }, [engine, potTotal, seatConfigById]);
+    // currentActorId is the key trigger: it advances after every bot action
+    // (including checks/folds that leave potTotal unchanged), re-scheduling the
+    // next actor. eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [engine, currentActorId, potTotal, seatConfigById]);
 
   // When a hand reaches showdown, settle stacks and record history exactly once.
   // This runs on every render (no dep array) because `engine` mutates in place and
@@ -279,14 +285,25 @@ export function useGame(setup: GameSetup) {
   }, [setup, stacks, dealerSeat, handNumber, handHistory, coachEnabled, levelIndex]);
 
   const humanAct = useCallback((type: ActionType, amount?: number) => {
-    if (!engine || currentActorId !== 'human') return;
+    // Re-check the live turn from the engine (not the render closure) so a stale
+    // click or an auto-fold timer firing a tick late can't drive an out-of-turn
+    // action — that throws inside the engine and used to white-screen the app.
+    if (!engine || engine.isHandOver() || engine.getCurrentActorId() !== 'human') return;
     const player = engine.players.find((p) => p.id === 'human')!;
     const valid = engine.getValidActions('human');
     const thinkMs = turnStartRef.current != null ? Math.round(performance.now() - turnStartRef.current) : 0;
+    const street = engine.street; // capture before act() mutates the engine
+
+    try {
+      engine.act('human', type, amount ?? (type === 'call' ? valid.callAmount + player.streetContributed : undefined));
+    } catch (err) {
+      console.error('Ignored invalid human action', type, err);
+      return;
+    }
     turnStartRef.current = null;
 
     currentHandTimingsRef.current.push({
-      street: engine.street,
+      street,
       action: type,
       thinkMs,
       equityPercent: advice?.equityPercent ?? null,
@@ -310,9 +327,8 @@ export function useGame(setup: GameSetup) {
       });
       setHandSummary((prev) => [...(prev ?? []), { playerId: 'human', score: result.score, explanation: result.explanation, thinkMs }]);
     }
-    engine.act('human', type, amount ?? (type === 'call' ? valid.callAmount + player.streetContributed : undefined));
     forceRender((n) => n + 1);
-  }, [engine, currentActorId, advice]);
+  }, [engine, advice]);
 
   // Auto-act for the human once their action timer expires: check if free, otherwise fold.
   useEffect(() => {

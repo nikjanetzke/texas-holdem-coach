@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { SetupScreen } from './components/SetupScreen';
 import { Table } from './components/Table';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import type { GameSetup } from './hooks/useGame';
 import { clearSession, loadSession, saveSession } from './persistence/storage';
 
@@ -21,11 +22,13 @@ function App() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
-      {setup ? (
-        <Table setup={setup} onExit={exitToSetup} />
-      ) : (
-        <SetupScreen onStart={startGame} />
-      )}
+      <ErrorBoundary onReset={exitToSetup}>
+        {setup ? (
+          <Table setup={setup} onExit={exitToSetup} />
+        ) : (
+          <SetupScreen onStart={startGame} />
+        )}
+      </ErrorBoundary>
     </div>
   );
 }
