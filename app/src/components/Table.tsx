@@ -247,7 +247,7 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
       </div>
 
       {/* Starting-hand rating (click to expand) */}
-      {engine.street === 'preflop' && human.holeCards.length === 2 && !isHandOver && (
+      {coachEnabled && engine.street === 'preflop' && human.holeCards.length === 2 && !isHandOver && (
         <StartingHandRating cards={human.holeCards} open={showCardRating} onToggle={() => setShowCardRating((v) => !v)} />
       )}
 

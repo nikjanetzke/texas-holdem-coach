@@ -3,9 +3,10 @@ import type { GameSetup } from '../hooks/useGame';
 import { buildDefaultSeats } from '../hooks/useGame';
 import { BLIND_SCHEDULES, DEFAULT_SCHEDULE_ID } from '../engine/blinds';
 import { SCENARIOS } from '../scenarios/scenarios';
+import { ChenTrainer } from './ChenTrainer';
 
 export function SetupScreen({ onStart }: { onStart: (setup: GameSetup) => void }) {
-  const [mode, setMode] = useState<'quick' | 'scenario'>('quick');
+  const [mode, setMode] = useState<'quick' | 'scenario' | 'train'>('quick');
   // Kept as strings so the fields can be cleared while typing (a numeric state
   // floored at the min would otherwise pin them at "0" and refuse to empty).
   const [numPlayers, setNumPlayers] = useState('6');
@@ -19,7 +20,7 @@ export function SetupScreen({ onStart }: { onStart: (setup: GameSetup) => void }
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top,_rgba(16,89,55,0.45),_transparent_60%)]" />
       <div className="pointer-events-none absolute -top-24 left-1/2 h-[420px] w-[420px] -translate-x-1/2 rounded-full bg-emerald-700/20 blur-3xl" />
 
-      <div className="relative mx-auto max-w-md px-4 pt-16 pb-10">
+      <div className={`relative mx-auto px-4 pt-16 pb-10 ${mode === 'train' ? 'max-w-lg' : 'max-w-md'}`}>
         <div className="mb-8 text-center">
           <div className="mb-3 flex justify-center gap-2 text-3xl">
             <span>🂡</span>
@@ -35,9 +36,12 @@ export function SetupScreen({ onStart }: { onStart: (setup: GameSetup) => void }
           <div className="mb-6 flex rounded-lg bg-slate-800 p-1">
             <ModeTab label="Quick game" active={mode === 'quick'} onClick={() => setMode('quick')} />
             <ModeTab label="Scenario" active={mode === 'scenario'} onClick={() => setMode('scenario')} />
+            <ModeTab label="Training" active={mode === 'train'} onClick={() => setMode('train')} />
           </div>
 
-          {mode === 'scenario' ? (
+          {mode === 'train' ? (
+            <ChenTrainer />
+          ) : mode === 'scenario' ? (
             <div className="space-y-2">
               {SCENARIOS.map((s) => (
                 <button
