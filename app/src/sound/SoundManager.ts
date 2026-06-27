@@ -88,7 +88,16 @@ class SoundManager {
   private get(name: SfxName): Howl {
     let howl = this.howls.get(name);
     if (!howl) {
-      howl = new Howl({ src: [DEFS[name]()], format: ['wav'] });
+      // Prefer a real recorded sample at /sounds/<name>.mp3; if it isn't present
+      // (404 / decode error), transparently fall back to the synthesized sound.
+      // Drop files into app/public/sounds/ to upgrade the audio with no code change.
+      howl = new Howl({
+        src: [`/sounds/${name}.mp3`],
+        format: ['mp3'],
+        onloaderror: () => {
+          this.howls.set(name, new Howl({ src: [DEFS[name]()], format: ['wav'] }));
+        },
+      });
       this.howls.set(name, howl);
     }
     return howl;
