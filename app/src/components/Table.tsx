@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import type { GameSetup } from '../hooks/useGame';
 import { useGame } from '../hooks/useGame';
 import { HandHistoryPanel } from './HandHistoryPanel';
@@ -53,6 +53,7 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
   const [heldAdvice, setHeldAdvice] = useState<typeof advice>(null);
   const [showCardRating, setShowCardRating] = useState(false);
   const [showMath, setShowMath] = useState(false);
+  const [openPanel, setOpenPanel] = useState<'history' | 'export' | null>(null);
   const feltObserverRef = useRef<ResizeObserver | null>(null);
   const feltResizeRef = useRef<() => void>(() => {});
   const [canvasSize, setCanvasSize] = useState({ width: 880, height: 500 });
@@ -415,13 +416,52 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
         </div>
       )}
 
-      <HandHistoryPanel history={handHistory} />
-      <ExportControls
-        setup={setup}
-        handHistory={handHistory}
-        leakTracker={leakTracker}
-        blinds={{ smallBlind: currentLevel.smallBlind, bigBlind: currentLevel.bigBlind }}
-      />
+      <div className="mt-4 space-y-2">
+        <Collapsible
+          label={`Hand history${handHistory.length ? ` (${handHistory.length})` : ''}`}
+          open={openPanel === 'history'}
+          onToggle={() => setOpenPanel((p) => (p === 'history' ? null : 'history'))}
+        >
+          <HandHistoryPanel history={handHistory} />
+        </Collapsible>
+        <Collapsible
+          label="Export & share"
+          open={openPanel === 'export'}
+          onToggle={() => setOpenPanel((p) => (p === 'export' ? null : 'export'))}
+        >
+          <ExportControls
+            setup={setup}
+            handHistory={handHistory}
+            leakTracker={leakTracker}
+            blinds={{ smallBlind: currentLevel.smallBlind, bigBlind: currentLevel.bigBlind }}
+          />
+        </Collapsible>
+      </div>
+    </div>
+  );
+}
+
+function Collapsible({
+  label,
+  open,
+  onToggle,
+  children,
+}: {
+  label: string;
+  open: boolean;
+  onToggle: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <div className="rounded-xl border border-slate-800 bg-slate-900/50">
+      <button
+        onClick={onToggle}
+        className="flex w-full items-center justify-between px-4 py-2.5 text-left text-sm font-semibold text-slate-200"
+      >
+        <span>{label}</span>
+        <span className="text-slate-500">{open ? '▲' : '▼'}</span>
+      </button>
+      {open && <div className="border-t border-slate-800 p-3">{children}</div>}
     </div>
   );
 }

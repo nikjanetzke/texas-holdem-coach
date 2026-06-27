@@ -35,8 +35,8 @@ export function drawCardFace(card: Card, w = CARD_W, h = CARD_H): Container {
   g.roundRect(0, 0, w, h, 6).fill(theme.CARD_WHITE).stroke({ width: 1, color: 0x000000, alpha: 0.3 });
   c.addChild(g);
 
-  const rankStyle = new TextStyle({ fontFamily: 'Georgia, serif', fontSize: w * 0.38, fontWeight: 'bold', fill: color });
-  const suitStyle = new TextStyle({ fontFamily: 'Georgia, serif', fontSize: w * 0.5, fill: color });
+  const rankStyle = new TextStyle({ fontFamily: 'Georgia, serif', fontSize: w * 0.44, fontWeight: 'bold', fill: color });
+  const suitStyle = new TextStyle({ fontFamily: 'Georgia, serif', fontSize: w * 0.66, fill: color });
 
   const rankText = new Text({ text: card.rank, style: rankStyle });
   rankText.anchor.set(0.5, 0);
