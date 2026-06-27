@@ -254,10 +254,12 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
         </div>
       )}
 
-      {/* Table beside controls in landscape; stacked in portrait. */}
-      <div className="flex min-h-0 flex-1 flex-col gap-2 landscape:flex-row landscape:items-stretch">
-        {/* Felt — hugs the canvas in portrait, fills the cell in landscape. */}
-        <div ref={feltRef} className="flex items-center justify-center overflow-hidden landscape:min-h-0 landscape:flex-1">
+      {/* Side-by-side (table + controls column) only on SHORT landscape screens
+          (i.e. phones held sideways). Desktop and portrait stay stacked, which
+          looks better and keeps the action buttons always visible. */}
+      <div className="flex min-h-0 flex-1 flex-col gap-2 [@media(max-height:640px)_and_(orientation:landscape)]:flex-row [@media(max-height:640px)_and_(orientation:landscape)]:items-stretch">
+        {/* Felt — hugs the canvas when stacked, fills the cell when side-by-side. */}
+        <div ref={feltRef} className="mx-auto flex w-full max-w-4xl items-center justify-center overflow-hidden [@media(max-height:640px)_and_(orientation:landscape)]:min-h-0 [@media(max-height:640px)_and_(orientation:landscape)]:max-w-none [@media(max-height:640px)_and_(orientation:landscape)]:flex-1">
         <PokerCanvas
           width={canvasSize.width}
           height={canvasSize.height}
@@ -284,8 +286,9 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
         />
         </div>
 
-        {/* Controls/info: a scrollable side column in landscape, stacked below in portrait. */}
-        <div className="flex flex-col gap-2 landscape:w-[340px] landscape:shrink-0 landscape:overflow-y-auto">
+        {/* Controls/info: a scrollable side column on short landscape screens,
+            full-width below the table otherwise. */}
+        <div className="mx-auto flex w-full max-w-4xl flex-col gap-2 [@media(max-height:640px)_and_(orientation:landscape)]:mx-0 [@media(max-height:640px)_and_(orientation:landscape)]:w-[340px] [@media(max-height:640px)_and_(orientation:landscape)]:max-w-none [@media(max-height:640px)_and_(orientation:landscape)]:shrink-0 [@media(max-height:640px)_and_(orientation:landscape)]:overflow-y-auto">
 
       {/* Starting-hand rating (click to expand) */}
       {coachEnabled && engine.street === 'preflop' && human.holeCards.length === 2 && !isHandOver && (

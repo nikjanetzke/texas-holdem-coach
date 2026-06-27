@@ -69,6 +69,12 @@ function drawFelt(w: number, h: number): Container {
 const LOGICAL_W = 880;
 const LOGICAL_H = 500;
 
+// Seat-box geometry, shared between the seat renderer and the muck/deal
+// animations so the flying cards line up with where the real cards sit.
+const SEAT_BOX_W = 172;
+const SEAT_BOX_H = 158;
+const SEAT_CARD_TOP = SEAT_BOX_H / 2 - CARD_H_SM - 8; // top-left y of hole cards within a seat box
+
 function easeOutCubic(t: number): number {
   return 1 - Math.pow(1 - t, 3);
 }
@@ -272,8 +278,8 @@ export function PokerCanvas({ seats, communityCards, potTotal, handNumber, winne
     c.position.set(x, y);
     const { player, isDealer, isSmallBlind, isBigBlind, isActing, isWinner, showCards, handLabel } = seat;
 
-    const boxW = 150;
-    const boxH = 120;
+    const boxW = SEAT_BOX_W;
+    const boxH = SEAT_BOX_H;
     const panel = new Graphics();
     const borderColor = isWinner ? theme.WINNER_GOLD : isActing ? theme.ACTING_RING : theme.SEAT_BORDER;
     const borderWidth = isWinner || isActing ? 2.5 : 1;
@@ -281,39 +287,41 @@ export function PokerCanvas({ seats, communityCards, potTotal, handNumber, winne
     if (player.folded) panel.alpha = 0.45;
     c.addChild(panel);
 
-    const avatar = drawAvatar(seat, 16, isActing ? theme.ACTING_RING : 0x475569);
-    avatar.position.set(-boxW / 2 + 18, -boxH / 2 + 18);
+    const avatarRadius = 30;
+    const avatar = drawAvatar(seat, avatarRadius, isActing ? theme.ACTING_RING : 0x475569);
+    avatar.position.set(-boxW / 2 + 8 + avatarRadius, -boxH / 2 + 8 + avatarRadius);
     c.addChild(avatar);
 
-    // Name and stack each get their own row so a long archetype name never
-    // collides with the chip count (previously both sat on the same line).
-    const nameStyle = new TextStyle({ fontFamily: 'system-ui, sans-serif', fontSize: 12, fontWeight: 'bold', fill: 0xe5e7eb });
-    const nameText = new Text({ text: truncateName(player.name, 11), style: nameStyle });
+    // Name and stack stack vertically to the right of the (now larger) avatar.
+    const textX = -boxW / 2 + 8 + avatarRadius * 2 + 8;
+    const nameStyle = new TextStyle({ fontFamily: 'system-ui, sans-serif', fontSize: 14, fontWeight: 'bold', fill: 0xe5e7eb });
+    const nameText = new Text({ text: truncateName(player.name, 10), style: nameStyle });
     nameText.anchor.set(0, 0.5);
-    nameText.position.set(-boxW / 2 + 40, -boxH / 2 + 13);
-    const maxNameWidth = boxW - 40 - 14;
+    nameText.position.set(textX, -boxH / 2 + 22);
+    const maxNameWidth = boxW / 2 - textX - 6; // remaining width to the right edge
     if (nameText.width > maxNameWidth) nameText.scale.set(maxNameWidth / nameText.width, 1);
     c.addChild(nameText);
 
-    const stackStyle = new TextStyle({ fontFamily: 'monospace', fontSize: 12, fontWeight: 'bold', fill: 0x6ee7b7 });
+    const stackStyle = new TextStyle({ fontFamily: 'monospace', fontSize: 14, fontWeight: 'bold', fill: 0x6ee7b7 });
     const stackText = new Text({ text: String(player.stack), style: stackStyle });
     stackText.anchor.set(0, 0.5);
-    stackText.position.set(-boxW / 2 + 40, -boxH / 2 + 30);
+    stackText.position.set(textX, -boxH / 2 + 42);
     c.addChild(stackText);
 
-    // Hole cards
+    // Hole cards, centered along the bottom of the box.
     const cardsContainer = new Container();
-    const gap = CARD_W_SM + 4;
+    const gap = CARD_W_SM + 6;
+    const cardY = SEAT_CARD_TOP;
     if (player.holeCards.length === 0) {
       const back1 = drawCardBack(CARD_W_SM, CARD_H_SM);
       const back2 = drawCardBack(CARD_W_SM, CARD_H_SM);
-      back1.position.set(-gap / 2 - CARD_W_SM / 2, 4);
-      back2.position.set(gap / 2 - CARD_W_SM / 2, 4);
+      back1.position.set(-gap / 2 - CARD_W_SM / 2, cardY);
+      back2.position.set(gap / 2 - CARD_W_SM / 2, cardY);
       cardsContainer.addChild(back1, back2);
     } else {
       player.holeCards.forEach((card, i) => {
         const node = showCards ? drawCardFace(card, CARD_W_SM, CARD_H_SM) : drawCardBack(CARD_W_SM, CARD_H_SM);
-        node.position.set((i === 0 ? -gap / 2 : gap / 2) - CARD_W_SM / 2, 4);
+        node.position.set((i === 0 ? -gap / 2 : gap / 2) - CARD_W_SM / 2, cardY);
         cardsContainer.addChild(node);
       });
     }
@@ -340,21 +348,19 @@ export function PokerCanvas({ seats, communityCards, potTotal, handNumber, winne
       c.addChild(b);
     }
 
-    if (player.folded) {
+    if (player.folded || handLabel) {
+      const label = player.folded ? 'FOLDED' : handLabel!;
+      const color = player.folded ? 0xcbd5e1 : theme.GOLD_BRIGHT;
       const t = new Text({
-        text: 'FOLDED',
-        style: new TextStyle({ fontFamily: 'system-ui, sans-serif', fontSize: 9, fill: 0x94a3b8, letterSpacing: 1 }),
+        text: label,
+        style: new TextStyle({ fontFamily: 'system-ui, sans-serif', fontSize: 11, fontWeight: 'bold', fill: color, letterSpacing: 1 }),
       });
       t.anchor.set(0.5);
-      t.position.set(0, boxH / 2 - 8);
-      c.addChild(t);
-    } else if (handLabel) {
-      const t = new Text({
-        text: handLabel,
-        style: new TextStyle({ fontFamily: 'system-ui, sans-serif', fontSize: 9, fontWeight: 'bold', fill: theme.GOLD_BRIGHT }),
-      });
-      t.anchor.set(0.5);
-      t.position.set(0, boxH / 2 - 8);
+      const pillW = t.width + 16;
+      const pill = new Graphics();
+      pill.roundRect(-pillW / 2, boxH / 2 - 22, pillW, 18, 9).fill({ color: 0x0b1220, alpha: 0.8 });
+      c.addChild(pill);
+      t.position.set(0, boxH / 2 - 13);
       c.addChild(t);
     }
 
@@ -383,10 +389,10 @@ export function PokerCanvas({ seats, communityCards, potTotal, handNumber, winne
 
   // Top-left positions of a seat's two hole cards (matches buildSeatNode layout).
   function holeCardCorners(seatX: number, seatY: number): Array<{ x: number; y: number }> {
-    const gap = CARD_W_SM + 4;
+    const gap = CARD_W_SM + 6;
     return [
-      { x: seatX - gap / 2 - CARD_W_SM / 2, y: seatY + 4 },
-      { x: seatX + gap / 2 - CARD_W_SM / 2, y: seatY + 4 },
+      { x: seatX - gap / 2 - CARD_W_SM / 2, y: seatY + SEAT_CARD_TOP },
+      { x: seatX + gap / 2 - CARD_W_SM / 2, y: seatY + SEAT_CARD_TOP },
     ];
   }
 

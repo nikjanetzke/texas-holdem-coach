@@ -5,10 +5,10 @@ import * as theme from './theme';
 const SUIT_SYMBOLS: Record<Card['suit'], string> = { s: '♠', h: '♥', d: '♦', c: '♣' };
 const RED_SUITS = new Set(['h', 'd']);
 
-export const CARD_W = 52;
-export const CARD_H = 73;
-export const CARD_W_SM = 38;
-export const CARD_H_SM = 53;
+export const CARD_W = 78;
+export const CARD_H = 110;
+export const CARD_W_SM = 57;
+export const CARD_H_SM = 80;
 
 export function drawCardBack(w = CARD_W, h = CARD_H): Container {
   const c = new Container();
