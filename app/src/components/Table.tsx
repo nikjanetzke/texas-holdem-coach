@@ -36,10 +36,8 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
     setCoachEnabled,
     actionSecondsLeft,
     currentLevel,
-    levelNumber,
     nextLevel,
     msLeftInLevel,
-    scheduleName,
   } = useGame(setup);
   const [raiseAmount, setRaiseAmount] = useState(0);
   const [muted, setMuted] = useState(soundManager.muted);
@@ -67,32 +65,32 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
     window.removeEventListener('resize', feltResizeRef.current);
     if (!el) return;
     const ASPECT = 880 / 500;
-    const update = (width: number) => {
-      // Fit the table within BOTH the container width and the remaining
-      // viewport height. On a phone in landscape the container is wide but
-      // short, so a width-only sizing made the table taller than the screen
-      // and you couldn't see the whole felt — clamp by available height too.
-      const cw = Math.max(320, Math.floor(width));
-      const top = el.getBoundingClientRect().top;
-      const availH = window.innerHeight - top - 150; // leave room for the action controls below
+    const update = () => {
+      // Fit the table to the largest size that fits inside its own container box
+      // (both width and height). The container is a flex cell whose size the CSS
+      // layout controls — wide-and-short in landscape (table beside the controls),
+      // full-width in portrait (controls below) — so measuring the box directly
+      // makes the table fill whatever space the responsive layout gives it.
+      const cw = Math.max(200, Math.floor(el.clientWidth));
+      const ch = Math.max(160, Math.floor(el.clientHeight));
       let w = cw;
       let h = Math.round(w / ASPECT);
-      if (availH > 120 && h > availH) {
-        h = Math.floor(availH);
-        w = Math.min(cw, Math.round(h * ASPECT));
+      if (h > ch) {
+        h = ch;
+        w = Math.round(h * ASPECT);
+      }
+      if (w > cw) {
+        w = cw;
         h = Math.round(w / ASPECT);
       }
       setCanvasSize((prev) => (prev.width === w && prev.height === h ? prev : { width: w, height: h }));
     };
-    const onResize = () => update(el.clientWidth);
-    feltResizeRef.current = onResize;
-    update(el.clientWidth);
-    const observer = new ResizeObserver((entries) => update(entries[0].contentRect.width));
+    feltResizeRef.current = update;
+    update();
+    const observer = new ResizeObserver(update);
     observer.observe(el);
     feltObserverRef.current = observer;
-    // Orientation/viewport-height changes don't always change the container
-    // width (which is what ResizeObserver watches), so listen for them too.
-    window.addEventListener('resize', onResize);
+    window.addEventListener('resize', update);
   }, []);
 
   const validActions =
@@ -160,6 +158,14 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
     if (!next) soundManager.play('click');
   }
 
+  function toggleFullscreen() {
+    if (document.fullscreenElement) {
+      document.exitFullscreen?.();
+    } else {
+      document.documentElement.requestFullscreen?.().catch(() => {});
+    }
+  }
+
   if (!engine) {
     return (
       <div className="flex h-screen flex-col items-center justify-center gap-4 text-slate-300">
@@ -181,50 +187,77 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
   const bbPlayerId = engine.bigBlindId;
 
   return (
-    <div className="mx-auto flex min-h-screen max-w-5xl flex-col overflow-x-hidden px-3 py-3 sm:px-4">
-      {/* Top bar */}
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-sm text-slate-300">
-        <button onClick={onExit} className="rounded px-2 py-1 text-slate-400 hover:bg-slate-800 hover:text-slate-100">
-          ← Setup
-        </button>
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <span>Hand #{handNumber}</span>
+    <div
+      className="mx-auto flex min-h-[100dvh] max-w-5xl flex-col overflow-x-hidden px-3 py-2 sm:px-4"
+      style={{
+        paddingTop: 'max(0.5rem, env(safe-area-inset-top))',
+        paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))',
+      }}
+    >
+      {/* Top bar — compact single row that scrolls horizontally if it overflows. */}
+      <div className="mb-2 flex items-center justify-between gap-2 text-sm text-slate-300">
+        <div className="flex min-w-0 items-center gap-2 overflow-x-auto whitespace-nowrap">
+          <button onClick={onExit} className="shrink-0 rounded px-1.5 py-1 text-slate-400 hover:bg-slate-800 hover:text-slate-100">
+            ←
+          </button>
+          <span className="shrink-0 font-semibold">#{handNumber}</span>
           {setup.scenarioName && (
-            <span className="rounded-full bg-purple-900/60 px-3 py-1 text-xs text-purple-200">{setup.scenarioName}</span>
+            <span className="shrink-0 rounded-full bg-purple-900/60 px-2 py-0.5 text-xs text-purple-200">{setup.scenarioName}</span>
           )}
-          <span className="rounded-full bg-slate-800 px-3 py-1 capitalize text-emerald-300">{engine.street}</span>
-          <div className="flex flex-wrap items-center gap-2" title={nextLevel ? `Next: ${nextLevel.smallBlind}/${nextLevel.bigBlind}` : 'Top level reached'}>
-            <span>
-              Blinds {currentLevel.smallBlind}/{currentLevel.bigBlind}
-              {currentLevel.ante > 0 && <span className="text-slate-400"> (ante {currentLevel.ante})</span>}
-            </span>
-            <span className="rounded-full bg-slate-800 px-2 py-1 text-xs text-amber-200">
-              {scheduleName} L{levelNumber}
-              {Number.isFinite(msLeftInLevel) && ` · ${formatClock(msLeftInLevel)}`}
-            </span>
-          </div>
+          <span className="shrink-0 rounded-full bg-slate-800 px-2 py-0.5 text-xs capitalize text-emerald-300">{engine.street}</span>
+          <span
+            className="shrink-0 rounded-full bg-slate-800 px-2 py-0.5 text-xs text-amber-200"
+            title={nextLevel ? `Next: ${nextLevel.smallBlind}/${nextLevel.bigBlind}` : 'Top level reached'}
+          >
+            {currentLevel.smallBlind}/{currentLevel.bigBlind}
+            {currentLevel.ante > 0 && ` (a${currentLevel.ante})`}
+            {Number.isFinite(msLeftInLevel) && ` · ${formatClock(msLeftInLevel)}`}
+          </span>
+        </div>
+        <div className="flex shrink-0 items-center gap-1.5">
+          <span className="hidden font-mono text-xs text-slate-400 sm:inline">Stack: {human.stack}</span>
           <button
             onClick={() => setCoachEnabled((v) => !v)}
-            className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
+            className={`rounded-full px-2 py-0.5 text-xs font-semibold transition-colors ${
               coachEnabled ? 'bg-indigo-600 text-white hover:bg-indigo-500' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
             }`}
             title="Leaks are still tracked in the background even when the coach panel is hidden."
           >
-            Coach: {coachEnabled ? 'On' : 'Off'}
+            Coach
           </button>
           <button
             onClick={toggleMuted}
-            className="rounded-full bg-slate-800 px-3 py-1 text-xs font-semibold text-slate-300 hover:bg-slate-700"
+            className="rounded-full bg-slate-800 px-2 py-0.5 text-xs font-semibold text-slate-300 hover:bg-slate-700"
             title="Toggle sound effects"
           >
-            {muted ? '🔇 Muted' : '🔊 Sound'}
+            {muted ? '🔇' : '🔊'}
+          </button>
+          <button
+            onClick={toggleFullscreen}
+            className="rounded-full bg-slate-800 px-2 py-0.5 text-xs font-semibold text-slate-300 hover:bg-slate-700"
+            title="Toggle fullscreen"
+          >
+            ⛶
           </button>
         </div>
-        <span className="font-mono">Your stack: {human.stack}</span>
       </div>
 
-      {/* Felt */}
-      <div ref={feltRef} className="mx-auto flex w-full max-w-4xl justify-center overflow-hidden">
+      {/* Win celebration — shows when you take down the pot. */}
+      {isHandOver && payouts['human'] > 0 && (
+        <div className="pointer-events-none fixed inset-x-0 top-1/4 z-30 flex justify-center px-4">
+          <div className="animate-fade-up rounded-2xl border-2 border-amber-400 bg-amber-500/95 px-8 py-4 text-center shadow-2xl shadow-amber-900/40">
+            <div className="text-2xl font-extrabold text-slate-900">🎉 You win {payouts['human']}!</div>
+            {bestHands['human'] && (
+              <div className="mt-0.5 text-sm font-semibold text-slate-800">with {HAND_RANK_NAMES[bestHands['human'].rank]}</div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Table beside controls in landscape; stacked in portrait. */}
+      <div className="flex min-h-0 flex-1 flex-col gap-2 landscape:flex-row landscape:items-stretch">
+        {/* Felt — hugs the canvas in portrait, fills the cell in landscape. */}
+        <div ref={feltRef} className="flex items-center justify-center overflow-hidden landscape:min-h-0 landscape:flex-1">
         <PokerCanvas
           width={canvasSize.width}
           height={canvasSize.height}
@@ -249,7 +282,10 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
             };
           })}
         />
-      </div>
+        </div>
+
+        {/* Controls/info: a scrollable side column in landscape, stacked below in portrait. */}
+        <div className="flex flex-col gap-2 landscape:w-[340px] landscape:shrink-0 landscape:overflow-y-auto">
 
       {/* Starting-hand rating (click to expand) */}
       {coachEnabled && engine.street === 'preflop' && human.holeCards.length === 2 && !isHandOver && (
@@ -322,39 +358,42 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
               />
             </div>
           )}
-          {(validActions.types.includes('bet') || validActions.types.includes('raise')) && (
-            <div className="mb-3 flex items-center gap-3">
-              <input
-                type="range"
-                min={validActions.types.includes('raise') ? validActions.minRaiseTo : currentLevel.bigBlind}
-                max={validActions.maxRaiseTo}
-                value={raiseAmount}
-                onChange={(e) => setRaiseAmount(Number(e.target.value))}
-                className="flex-1 accent-emerald-500"
-              />
-              <span className="w-20 text-right font-mono text-amber-200">{raiseAmount}</span>
-              <div className="flex gap-1">
-                <QuickBet label="½ pot" onClick={() => setRaiseAmount(clamp(Math.round(potTotal * 0.5), validActions, currentLevel.bigBlind))} />
-                <QuickBet label="pot" onClick={() => setRaiseAmount(clamp(potTotal, validActions, currentLevel.bigBlind))} />
-                <QuickBet label="max" onClick={() => setRaiseAmount(validActions.maxRaiseTo)} />
-              </div>
+          {/* Buttons on the left, bet sizing on the right (stacks on narrow screens). */}
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+            <div className="flex flex-wrap gap-2">
+              {validActions.types.includes('fold') && (
+                <ActionButton label="Fold" tone="danger" onClick={() => humanAct('fold')} />
+              )}
+              {validActions.types.includes('check') && (
+                <ActionButton label="Check" tone="neutral" onClick={() => humanAct('check')} />
+              )}
+              {validActions.types.includes('call') && (
+                <ActionButton label={`Call ${validActions.callAmount}`} tone="primary" onClick={() => humanAct('call')} />
+              )}
+              {validActions.types.includes('bet') && (
+                <ActionButton label={`Bet ${raiseAmount}`} tone="primary" onClick={() => humanAct('bet', raiseAmount)} />
+              )}
+              {validActions.types.includes('raise') && (
+                <ActionButton label={`Raise to ${raiseAmount}`} tone="primary" onClick={() => humanAct('raise', raiseAmount)} />
+              )}
             </div>
-          )}
-          <div className="flex flex-wrap gap-2">
-            {validActions.types.includes('fold') && (
-              <ActionButton label="Fold" tone="danger" onClick={() => humanAct('fold')} />
-            )}
-            {validActions.types.includes('check') && (
-              <ActionButton label="Check" tone="neutral" onClick={() => humanAct('check')} />
-            )}
-            {validActions.types.includes('call') && (
-              <ActionButton label={`Call ${validActions.callAmount}`} tone="primary" onClick={() => humanAct('call')} />
-            )}
-            {validActions.types.includes('bet') && (
-              <ActionButton label={`Bet ${raiseAmount}`} tone="primary" onClick={() => humanAct('bet', raiseAmount)} />
-            )}
-            {validActions.types.includes('raise') && (
-              <ActionButton label={`Raise to ${raiseAmount}`} tone="primary" onClick={() => humanAct('raise', raiseAmount)} />
+            {(validActions.types.includes('bet') || validActions.types.includes('raise')) && (
+              <div className="flex items-center gap-3 lg:flex-1">
+                <input
+                  type="range"
+                  min={validActions.types.includes('raise') ? validActions.minRaiseTo : currentLevel.bigBlind}
+                  max={validActions.maxRaiseTo}
+                  value={raiseAmount}
+                  onChange={(e) => setRaiseAmount(Number(e.target.value))}
+                  className="flex-1 accent-emerald-500"
+                />
+                <span className="w-16 text-right font-mono text-amber-200">{raiseAmount}</span>
+                <div className="flex gap-1">
+                  <QuickBet label="½" onClick={() => setRaiseAmount(clamp(Math.round(potTotal * 0.5), validActions, currentLevel.bigBlind))} />
+                  <QuickBet label="pot" onClick={() => setRaiseAmount(clamp(potTotal, validActions, currentLevel.bigBlind))} />
+                  <QuickBet label="max" onClick={() => setRaiseAmount(validActions.maxRaiseTo)} />
+                </div>
+              </div>
             )}
           </div>
         </div>
@@ -436,6 +475,8 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
             blinds={{ smallBlind: currentLevel.smallBlind, bigBlind: currentLevel.bigBlind }}
           />
         </Collapsible>
+      </div>
+        </div>
       </div>
     </div>
   );
