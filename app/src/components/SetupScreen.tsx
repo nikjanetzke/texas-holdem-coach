@@ -28,7 +28,14 @@ export function SetupScreen({ onStart }: { onStart: (setup: GameSetup) => void }
             className="w-full rounded-2xl border border-slate-700 shadow-2xl shadow-black/60"
           />
           <button
-            onClick={() => setEntered(true)}
+            onClick={() => {
+              // This tap is a user gesture, so we can request fullscreen here —
+              // on Android/Chrome this hides the OS status bar and URL bar for a
+              // true edge-to-edge game. (iOS Safari ignores it; use Add to Home
+              // Screen there for the same effect.)
+              document.documentElement.requestFullscreen?.().catch(() => {});
+              setEntered(true);
+            }}
             className="mt-8 rounded-xl bg-emerald-600 px-10 py-3 text-lg font-bold text-white shadow-lg shadow-emerald-900/40 transition-colors hover:bg-emerald-500"
           >
             Start

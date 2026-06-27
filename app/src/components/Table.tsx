@@ -572,8 +572,8 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
 }
 
 function CoinBurst() {
-  const icons = ['🪙', '💰', '✨', '💵', '🤑'];
-  const coins = Array.from({ length: 28 });
+  const icons = ['🪙', '💰', '💵', '💸', '🤑', '✨', '🎉', '⭐'];
+  const coins = Array.from({ length: 48 });
   return (
     <div className="pointer-events-none absolute inset-0 overflow-hidden">
       {coins.map((_, i) => {
