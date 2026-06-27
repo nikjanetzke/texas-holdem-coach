@@ -228,6 +228,8 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
           width={canvasSize.width}
           height={canvasSize.height}
           potTotal={potTotal}
+          handNumber={handNumber}
+          winnerIds={isHandOver ? Object.keys(payouts) : []}
           communityCards={engine.communityCards}
           seats={engine.players.map((p, idx) => {
             const showCards = p.id === 'human' || (isHandOver && !p.folded && !!engine.showdownResult);

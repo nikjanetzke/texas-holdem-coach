@@ -22,6 +22,10 @@ export interface PokerCanvasProps {
   seats: SeatViewModel[];
   communityCards: Card[];
   potTotal: number;
+  /** Increments each new hand; triggers the deal animation. */
+  handNumber?: number;
+  /** IDs of seats that won the pot; triggers the chip-award animation. */
+  winnerIds?: string[];
   width?: number;
   height?: number;
 }
@@ -65,10 +69,25 @@ function drawFelt(w: number, h: number): Container {
 const LOGICAL_W = 880;
 const LOGICAL_H = 500;
 
-export function PokerCanvas({ seats, communityCards, potTotal, width = LOGICAL_W, height = LOGICAL_H }: PokerCanvasProps) {
+function easeOutCubic(t: number): number {
+  return 1 - Math.pow(1 - t, 3);
+}
+
+export function PokerCanvas({ seats, communityCards, potTotal, handNumber, winnerIds, width = LOGICAL_W, height = LOGICAL_H }: PokerCanvasProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<Application | null>(null);
   const sceneRef = useRef<Container | null>(null);
+  // A separate layer above the scene for transient animations. renderScene()
+  // clears `scene` on every state change, so anything that must survive across
+  // re-renders (flying cards, chips) lives here instead and self-removes.
+  const overlayRef = useRef<Container | null>(null);
+  // Active animation step functions; each returns true when finished. Driven by
+  // the Pixi ticker so tweens run independently of React's render cycle.
+  const animationsRef = useRef<Array<(now: number) => boolean>>([]);
+  // Snapshots used to detect state transitions worth animating.
+  const prevFoldedRef = useRef<Set<string>>(new Set());
+  const lastDealtHandRef = useRef<number | undefined>(undefined);
+  const lastWinHandRef = useRef<number | undefined>(undefined);
   // Kept in sync every render so the async app.init() callback can pick up
   // the latest size even if width/height changed while init() was pending —
   // otherwise a resize that races ahead of init() completing gets dropped.
@@ -107,6 +126,7 @@ export function PokerCanvas({ seats, communityCards, potTotal, width = LOGICAL_W
     app.canvas.style.width = `${w}px`;
     app.canvas.style.height = `${h}px`;
     scene.scale.set(w / LOGICAL_W, h / LOGICAL_H);
+    if (overlayRef.current) overlayRef.current.scale.set(w / LOGICAL_W, h / LOGICAL_H);
   }
 
   // Mount the Pixi application once; resizing is handled separately by scaling
@@ -131,6 +151,15 @@ export function PokerCanvas({ seats, communityCards, potTotal, width = LOGICAL_W
       const scene = new Container();
       app.stage.addChild(scene);
       sceneRef.current = scene;
+      const overlay = new Container();
+      app.stage.addChild(overlay);
+      overlayRef.current = overlay;
+      // Run all active animation steps each frame; drop the finished ones.
+      app.ticker.add(() => {
+        if (animationsRef.current.length === 0) return;
+        const now = performance.now();
+        animationsRef.current = animationsRef.current.filter((step) => !step(now));
+      });
       // Pick up the latest width/height in case they changed while init() was pending.
       applySize(app, scene, sizeRef.current.width, sizeRef.current.height);
       renderScene();
@@ -139,6 +168,8 @@ export function PokerCanvas({ seats, communityCards, potTotal, width = LOGICAL_W
     return () => {
       destroyed = true;
       sceneRef.current = null;
+      overlayRef.current = null;
+      animationsRef.current = [];
       const a = appRef.current;
       appRef.current = null;
       if (a && a.renderer) a.destroy(true);
@@ -320,6 +351,121 @@ export function PokerCanvas({ seats, communityCards, potTotal, width = LOGICAL_W
 
     return c;
   }
+
+  // Top-left positions of a seat's two hole cards (matches buildSeatNode layout).
+  function holeCardCorners(seatX: number, seatY: number): Array<{ x: number; y: number }> {
+    const gap = CARD_W_SM + 4;
+    return [
+      { x: seatX - gap / 2 - CARD_W_SM / 2, y: seatY + 4 },
+      { x: seatX + gap / 2 - CARD_W_SM / 2, y: seatY + 4 },
+    ];
+  }
+
+  // Tween a display object from one point to another over the overlay layer.
+  function tween(
+    obj: Container,
+    from: { x: number; y: number },
+    to: { x: number; y: number },
+    opts: { delayMs?: number; durMs: number; fadeOut?: boolean; onDone?: () => void },
+  ) {
+    const overlay = overlayRef.current;
+    if (!overlay) return;
+    overlay.addChild(obj);
+    obj.position.set(from.x, from.y);
+    obj.alpha = opts.delayMs ? 0 : 1;
+    const start = performance.now() + (opts.delayMs ?? 0);
+    animationsRef.current.push((now) => {
+      if (now < start) return false;
+      const t = Math.min(1, (now - start) / opts.durMs);
+      const e = easeOutCubic(t);
+      obj.position.set(from.x + (to.x - from.x) * e, from.y + (to.y - from.y) * e);
+      obj.alpha = opts.fadeOut ? 1 - t : 1;
+      if (t >= 1) {
+        overlay.removeChild(obj);
+        obj.destroy({ children: true });
+        opts.onDone?.();
+        return true;
+      }
+      return false;
+    });
+  }
+
+  // (5) Deal: flick a card-back from the dealer's seat to every seat's hole
+  // slots, staggered around the table, then let the real cards show underneath.
+  function animateDeal() {
+    const total = seats.length;
+    const dealerIdx = Math.max(0, seats.findIndex((s) => s.isDealer));
+    const dealerPos = seatPosition(dealerIdx, total, LOGICAL_W, LOGICAL_H);
+    const origin = { x: dealerPos.x, y: dealerPos.y };
+    let order = 0;
+    seats.forEach((seat, idx) => {
+      if (seat.player.holeCards.length === 0 && !seat.showCards && seat.player.folded) return;
+      const pos = seatPosition(idx, total, LOGICAL_W, LOGICAL_H);
+      holeCardCorners(pos.x, pos.y).forEach((corner) => {
+        const card = drawCardBack(CARD_W_SM, CARD_H_SM);
+        tween(card, origin, corner, { delayMs: order * 90, durMs: 280 });
+        order++;
+      });
+    });
+  }
+
+  // (4) Fold-to-muck: slide the folding player's two cards into the middle.
+  function animateMuck(seatIdx: number) {
+    const total = seats.length;
+    const pos = seatPosition(seatIdx, total, LOGICAL_W, LOGICAL_H);
+    const center = { x: LOGICAL_W / 2 - CARD_W_SM / 2, y: LOGICAL_H * 0.5 - CARD_H_SM / 2 };
+    holeCardCorners(pos.x, pos.y).forEach((corner, i) => {
+      const card = drawCardBack(CARD_W_SM, CARD_H_SM);
+      tween(card, corner, { x: center.x + i * 6, y: center.y }, { durMs: 420, fadeOut: true });
+    });
+  }
+
+  // (6) Pot award: send chip stacks from the centre pot to each winner.
+  function animateWin(ids: string[]) {
+    const total = seats.length;
+    const center = { x: LOGICAL_W / 2, y: LOGICAL_H * 0.52 };
+    ids.forEach((id) => {
+      const idx = seats.findIndex((s) => s.player.id === id);
+      if (idx < 0) return;
+      const pos = seatPosition(idx, total, LOGICAL_W, LOGICAL_H);
+      for (let i = 0; i < 3; i++) {
+        const chips = drawChipStack(0);
+        // drawChipStack labels with the amount; we just want tokens, so hide the label child.
+        const label = chips.children[chips.children.length - 1];
+        if (label) label.visible = false;
+        tween(chips, { x: center.x + (i - 1) * 10, y: center.y }, { x: pos.x, y: pos.y }, { delayMs: i * 80, durMs: 480, fadeOut: true });
+      }
+    });
+  }
+
+  // Trigger the deal animation once per new hand.
+  useEffect(() => {
+    if (handNumber == null || handNumber === lastDealtHandRef.current) return;
+    lastDealtHandRef.current = handNumber;
+    if (overlayRef.current) animateDeal();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [handNumber]);
+
+  // Trigger a muck animation for any seat that just folded.
+  useEffect(() => {
+    const nowFolded = new Set(seats.filter((s) => s.player.folded).map((s) => s.player.id));
+    seats.forEach((seat, idx) => {
+      if (seat.player.folded && !prevFoldedRef.current.has(seat.player.id)) {
+        if (overlayRef.current) animateMuck(idx);
+      }
+    });
+    prevFoldedRef.current = nowFolded;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seats]);
+
+  // Trigger the chip-award animation once per hand when winners are known.
+  useEffect(() => {
+    if (!winnerIds || winnerIds.length === 0) return;
+    if (handNumber === lastWinHandRef.current) return;
+    lastWinHandRef.current = handNumber;
+    if (overlayRef.current) animateWin(winnerIds);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [winnerIds, handNumber]);
 
   // Load any not-yet-cached portrait textures, then redraw so the photos
   // replace the fallback faces. Failures are cached as null (drawn face stays).
