@@ -240,6 +240,7 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
               showCards,
               handLabel,
               speech: speechByPlayer[p.id],
+              portrait: setup.seats.find((s) => s.id === p.id)?.profile?.portrait,
             };
           })}
         />

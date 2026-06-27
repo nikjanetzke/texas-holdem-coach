@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { Application, Container, Graphics, Text, TextStyle } from 'pixi.js';
+import { Application, Assets, Container, Graphics, Sprite, Text, TextStyle, Texture } from 'pixi.js';
 import type { Card } from '../engine/deck';
 import type { HandPlayer } from '../engine/game';
 import * as theme from './theme';
@@ -15,6 +15,7 @@ export interface SeatViewModel {
   showCards: boolean;
   handLabel?: string;
   speech?: string;
+  portrait?: string;
 }
 
 export interface PokerCanvasProps {
@@ -73,6 +74,33 @@ export function PokerCanvas({ seats, communityCards, potTotal, width = LOGICAL_W
   // otherwise a resize that races ahead of init() completing gets dropped.
   const sizeRef = useRef({ width, height });
   sizeRef.current = { width, height };
+  // Loaded portrait textures keyed by URL. A `null` entry means "tried and
+  // failed to load" so we don't keep retrying a missing file every render.
+  const portraitCache = useRef<Map<string, Texture | null>>(new Map());
+
+  // Round avatar: a circular-masked portrait sprite if its texture is loaded,
+  // otherwise the procedurally-drawn face. Always wrapped in an accent ring.
+  function drawAvatar(seat: SeatViewModel, radius: number, accent: number): Container {
+    const tex = seat.portrait ? portraitCache.current.get(seat.portrait) : undefined;
+    if (!tex) return drawFace(seat.player.id, radius, accent);
+
+    const c = new Container();
+    const sprite = new Sprite(tex);
+    sprite.anchor.set(0.5);
+    // Cover-fit the (assumed roughly square) texture into the circle's diameter.
+    const size = radius * 2;
+    const scale = size / Math.min(tex.width, tex.height);
+    sprite.scale.set(scale);
+    const mask = new Graphics();
+    mask.circle(0, 0, radius).fill(0xffffff);
+    sprite.mask = mask;
+    if (seat.player.folded) sprite.alpha = 0.6;
+    c.addChild(mask, sprite);
+    const ring = new Graphics();
+    ring.circle(0, 0, radius + 2).stroke({ width: 2, color: accent });
+    c.addChild(ring);
+    return c;
+  }
 
   function applySize(app: Application, scene: Container, w: number, h: number) {
     app.renderer.resize(w, h);
@@ -193,7 +221,7 @@ export function PokerCanvas({ seats, communityCards, potTotal, width = LOGICAL_W
     if (player.folded) panel.alpha = 0.45;
     c.addChild(panel);
 
-    const avatar = drawFace(player.id, 16, isActing ? theme.ACTING_RING : 0x475569);
+    const avatar = drawAvatar(seat, 16, isActing ? theme.ACTING_RING : 0x475569);
     avatar.position.set(-boxW / 2 + 18, -boxH / 2 + 18);
     c.addChild(avatar);
 
@@ -292,6 +320,36 @@ export function PokerCanvas({ seats, communityCards, potTotal, width = LOGICAL_W
 
     return c;
   }
+
+  // Load any not-yet-cached portrait textures, then redraw so the photos
+  // replace the fallback faces. Failures are cached as null (drawn face stays).
+  useEffect(() => {
+    const urls = Array.from(new Set(seats.map((s) => s.portrait).filter((u): u is string => !!u)));
+    const missing = urls.filter((u) => !portraitCache.current.has(u));
+    if (missing.length === 0) return;
+    let cancelled = false;
+    Promise.all(
+      missing.map(async (url) => {
+        try {
+          const tex = await Assets.load<Texture>(url);
+          portraitCache.current.set(url, tex);
+        } catch {
+          portraitCache.current.set(url, null);
+        }
+      }),
+    ).then(() => {
+      if (cancelled) return;
+      try {
+        renderScene();
+      } catch (err) {
+        console.error('PokerCanvas render error', err);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seats]);
 
   useEffect(() => {
     // A draw error must never crash the React tree (and white-screen the game);

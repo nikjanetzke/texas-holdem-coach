@@ -4,8 +4,8 @@ import type { ActionLogEntry, HandPlayer, ShowdownResult, Street } from '../engi
 import type { Card } from '../engine/deck';
 import type { ActionType } from '../engine/betting';
 import { decideAIAction } from '../ai/decide';
-import { AI_ARCHETYPES } from '../ai/profiles';
 import type { AIProfile } from '../ai/profiles';
+import { CHARACTERS } from '../ai/characters';
 import { classifyPosition, generateAdvice, LeakTracker, scoreDecision } from '../coach/coach';
 import type { CoachAdvice, Leak } from '../coach/coach';
 import { loadSession, saveSession } from '../persistence/storage';
@@ -58,14 +58,16 @@ export interface HandRecord {
   decisionTimings: DecisionTiming[];
 }
 
-const ARCHETYPE_LIST = [AI_ARCHETYPES.tight, AI_ARCHETYPES.looseAggressive, AI_ARCHETYPES.callingStation];
 const MAX_HAND_HISTORY = 20;
 
+// Pick a fresh, shuffled subset of the character roster each game so the table
+// feels different but every opponent is one of the recurring named personalities.
 export function buildDefaultSeats(numPlayers: number): SeatConfig[] {
   const seats: SeatConfig[] = [{ id: 'human', name: 'You', isHuman: true }];
+  const roster = [...CHARACTERS].sort(() => Math.random() - 0.5);
   for (let i = 1; i < numPlayers; i++) {
-    const profile = ARCHETYPE_LIST[(i - 1) % ARCHETYPE_LIST.length];
-    seats.push({ id: `ai-${i}`, name: `${profile.shortName} ${i}`, isHuman: false, profile });
+    const profile = roster[(i - 1) % roster.length];
+    seats.push({ id: profile.id, name: profile.shortName, isHuman: false, profile });
   }
   return seats;
 }

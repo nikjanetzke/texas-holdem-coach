@@ -13,6 +13,8 @@ export interface AIProfile {
   callingFrequency: number;
   /** Flavor lines spoken (shown as a speech bubble) when taking these actions. */
   catchphrases: Partial<Record<'fold' | 'check' | 'call' | 'bet' | 'raise' | 'all-in', string[]>>;
+  /** Optional portrait image (served from /avatars/…); falls back to a drawn face if absent or fails to load. */
+  portrait?: string;
 }
 
 export const AI_ARCHETYPES: Record<string, AIProfile> = {
