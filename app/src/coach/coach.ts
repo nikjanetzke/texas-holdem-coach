@@ -31,6 +31,21 @@ export interface CoachAdviceInput {
   rng?: () => number;
 }
 
+// The raw numbers behind the advice, so the UI can show *how* the verdict was
+// reached (the "show the math" breakdown) rather than just the conclusion.
+export interface CoachMath {
+  winPercent: number;
+  tiePercent: number;
+  lossPercent: number;
+  iterations: number;
+  numOpponents: number;
+  equityPercent: number;
+  potBeforeCall: number;
+  amountToCall: number;
+  potOddsPercent: number;
+  facingBet: boolean;
+}
+
 export interface CoachAdvice {
   equityPercent: number;
   handStrengthLabel: string;
@@ -39,6 +54,7 @@ export interface CoachAdvice {
   suggestedAction: ActionType;
   reasoning: string[];
   warnings: string[];
+  math: CoachMath;
 }
 
 export function generateAdvice(input: CoachAdviceInput): CoachAdvice {
@@ -114,6 +130,18 @@ export function generateAdvice(input: CoachAdviceInput): CoachAdvice {
     suggestedAction,
     reasoning,
     warnings,
+    math: {
+      winPercent: equityResult.winProbability * 100,
+      tiePercent: equityResult.tieProbability * 100,
+      lossPercent: equityResult.lossProbability * 100,
+      iterations: equityResult.iterations,
+      numOpponents: input.numOpponents,
+      equityPercent: equity * 100,
+      potBeforeCall: potOdds.potBeforeCall,
+      amountToCall: potOdds.amountToCall,
+      potOddsPercent: potOdds.potOddsPercent,
+      facingBet,
+    },
   };
 }
 

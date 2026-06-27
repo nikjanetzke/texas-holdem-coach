@@ -8,6 +8,7 @@ import type { ActionType } from '../engine/betting';
 import { PokerCanvas } from '../pixi/PokerCanvas';
 import { soundManager, type SfxName } from '../sound/SoundManager';
 import { chenScore } from '../engine/preflop';
+import type { CoachMath } from '../coach/coach';
 import type { Card } from '../engine/deck';
 
 const ACTION_SOUND: Record<ActionType, SfxName> = {
@@ -51,6 +52,7 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
   const [coachRevealed, setCoachRevealed] = useState(false);
   const [heldAdvice, setHeldAdvice] = useState<typeof advice>(null);
   const [showCardRating, setShowCardRating] = useState(false);
+  const [showMath, setShowMath] = useState(false);
   const feltObserverRef = useRef<ResizeObserver | null>(null);
   const feltResizeRef = useRef<() => void>(() => {});
   const [canvasSize, setCanvasSize] = useState({ width: 880, height: 500 });
@@ -293,6 +295,13 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
                 ⚠ {w}
               </div>
             ))}
+            <button
+              onClick={() => setShowMath((v) => !v)}
+              className="mt-2 text-xs font-semibold text-indigo-300 hover:text-indigo-200"
+            >
+              {showMath ? '▾ Hide the math' : '▸ Show the math'}
+            </button>
+            {showMath && <MathBreakdown math={shown.math} suggested={shown.suggestedAction} />}
           </div>
         );
       })()}
@@ -425,6 +434,59 @@ function formatClock(ms: number): string {
 function clamp(value: number, valid: { minRaiseTo: number; maxRaiseTo: number; types: ActionType[] }, bb: number) {
   const min = valid.types.includes('raise') ? valid.minRaiseTo : bb;
   return Math.max(min, Math.min(valid.maxRaiseTo, value));
+}
+
+function MathBreakdown({ math, suggested }: { math: CoachMath; suggested: ActionType }) {
+  const equity = math.equityPercent;
+  const beatsOdds = equity >= math.potOddsPercent;
+  return (
+    <div className="mt-2 space-y-2 rounded-lg border border-slate-700 bg-slate-950/50 p-2.5 text-xs text-slate-300">
+      <div>
+        <div className="font-semibold text-slate-200">1. Equity — your chance to win</div>
+        <p className="mt-0.5 text-slate-400">
+          Simulated {math.iterations.toLocaleString()} random run-outs against {math.numOpponents} opponent
+          {math.numOpponents === 1 ? '' : 's'}:
+        </p>
+        <p className="mt-0.5 font-mono">
+          win {math.winPercent.toFixed(1)}% + (tie {math.tiePercent.toFixed(1)}% ÷ 2) ={' '}
+          <span className="text-emerald-300">{equity.toFixed(1)}% equity</span>
+        </p>
+      </div>
+
+      {math.facingBet ? (
+        <>
+          <div>
+            <div className="font-semibold text-slate-200">2. Pot odds — the price to call</div>
+            <p className="mt-0.5 font-mono">
+              call {math.amountToCall} ÷ (pot {math.potBeforeCall} + call {math.amountToCall}) ={' '}
+              <span className="text-amber-300">{math.potOddsPercent.toFixed(1)}%</span>
+            </p>
+            <p className="mt-0.5 text-slate-400">
+              You need at least {math.potOddsPercent.toFixed(1)}% equity for a call to break even.
+            </p>
+          </div>
+          <div>
+            <div className="font-semibold text-slate-200">3. Compare</div>
+            <p className="mt-0.5">
+              Equity {equity.toFixed(1)}% {beatsOdds ? '≥' : '<'} pot odds {math.potOddsPercent.toFixed(1)}% →{' '}
+              <span className={beatsOdds ? 'text-emerald-300' : 'text-rose-300'}>
+                {beatsOdds ? 'calling is +EV' : 'calling loses chips on average'}
+              </span>
+              . Coach suggests <span className="capitalize text-amber-300">{suggested}</span>.
+            </p>
+          </div>
+        </>
+      ) : (
+        <div>
+          <div className="font-semibold text-slate-200">2. No bet to call</div>
+          <p className="mt-0.5 text-slate-400">
+            Nothing to call, so it's a free decision: bet for value with a strong hand, otherwise check. With{' '}
+            {equity.toFixed(1)}% equity the coach suggests <span className="capitalize text-amber-300">{suggested}</span>.
+          </p>
+        </div>
+      )}
+    </div>
+  );
 }
 
 function chenLabel(score: number): { label: string; tone: string } {
