@@ -35,17 +35,17 @@ export function drawCardFace(card: Card, w = CARD_W, h = CARD_H): Container {
   g.roundRect(0, 0, w, h, 6).fill(theme.CARD_WHITE).stroke({ width: 1, color: 0x000000, alpha: 0.3 });
   c.addChild(g);
 
-  const rankStyle = new TextStyle({ fontFamily: 'Georgia, serif', fontSize: w * 0.32, fontWeight: 'bold', fill: color });
-  const suitStyle = new TextStyle({ fontFamily: 'Georgia, serif', fontSize: w * 0.26, fill: color });
+  const rankStyle = new TextStyle({ fontFamily: 'Georgia, serif', fontSize: w * 0.38, fontWeight: 'bold', fill: color });
+  const suitStyle = new TextStyle({ fontFamily: 'Georgia, serif', fontSize: w * 0.5, fill: color });
 
   const rankText = new Text({ text: card.rank, style: rankStyle });
   rankText.anchor.set(0.5, 0);
-  rankText.position.set(w / 2, h * 0.08);
+  rankText.position.set(w / 2, h * 0.04);
   c.addChild(rankText);
 
   const suitText = new Text({ text: SUIT_SYMBOLS[card.suit], style: suitStyle });
-  suitText.anchor.set(0.5, 0);
-  suitText.position.set(w / 2, h * 0.46);
+  suitText.anchor.set(0.5, 0.5);
+  suitText.position.set(w / 2, h * 0.62);
   c.addChild(suitText);
 
   return c;
