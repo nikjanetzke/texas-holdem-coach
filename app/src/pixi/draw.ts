@@ -54,9 +54,9 @@ export function drawCardFace(card: Card, w = CARD_W, h = CARD_H): Container {
 export function drawChipStack(amount: number): Container {
   const c = new Container();
   const chips = theme.chipBreakdown(amount);
-  const radius = 9;
+  const radius = 12;
   chips.forEach((chip, i) => {
-    const y = -i * 3;
+    const y = -i * 4;
     const shadow = new Graphics();
     shadow.ellipse(0, y + 2, radius, radius * 0.55).fill({ color: 0x000000, alpha: 0.15 });
     c.addChild(shadow);
@@ -69,14 +69,14 @@ export function drawChipStack(amount: number): Container {
 
   const labelStyle = new TextStyle({
     fontFamily: 'system-ui, sans-serif',
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: 'bold',
     fill: theme.GOLD_BRIGHT,
     stroke: { color: 0x000000, width: 3 },
   });
   const label = new Text({ text: String(amount), style: labelStyle });
   label.anchor.set(0.5, 1);
-  label.position.set(0, -chips.length * 3 - 10);
+  label.position.set(0, -chips.length * 4 - 12);
   c.addChild(label);
 
   return c;

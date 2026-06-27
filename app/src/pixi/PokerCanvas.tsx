@@ -3,7 +3,7 @@ import { Application, Assets, Container, Graphics, Sprite, Text, TextStyle, Text
 import type { Card } from '../engine/deck';
 import type { HandPlayer } from '../engine/game';
 import * as theme from './theme';
-import { drawFace, drawBadge, drawCardBack, drawCardFace, drawChipStack, CARD_W, CARD_H, CARD_W_SM, CARD_H_SM } from './draw';
+import { drawFace, drawBadge, drawCardBack, drawCardFace, drawChipStack, CARD_W_SM, CARD_H_SM } from './draw';
 
 export interface SeatViewModel {
   player: HandPlayer;
@@ -36,10 +36,12 @@ function truncateName(name: string, max = 8): string {
 
 function seatPosition(index: number, total: number, w: number, h: number) {
   const theta = (index / total) * 2 * Math.PI;
-  const x = w / 2 + (w * 0.42) * Math.sin(theta);
-  const y = h / 2 + (h * 0.38) * Math.cos(theta);
-  const chipX = x + (w / 2 - x) * 0.35;
-  const chipY = y + (h / 2 - y) * 0.35;
+  // Vertical spread kept tight enough that the tall seat boxes at the top and
+  // bottom of the oval stay fully on-canvas (heads no longer clipped).
+  const x = w / 2 + (w * 0.41) * Math.sin(theta);
+  const y = h / 2 + (h * 0.33) * Math.cos(theta);
+  const chipX = x + (w / 2 - x) * 0.32;
+  const chipY = y + (h / 2 - y) * 0.32;
   return { x, y, chipX, chipY };
 }
 
@@ -229,13 +231,13 @@ export function PokerCanvas({ seats, communityCards, potTotal, handNumber, winne
       scene.addChild(drawFelt(LOGICAL_W, LOGICAL_H));
     }
 
-    // Community cards
+    // Community cards — same size as the players' hole cards.
     const board = new Container();
-    const cardGap = CARD_W + 8;
+    const cardGap = CARD_W_SM + 8;
     const startX = LOGICAL_W / 2 - (communityCards.length * cardGap) / 2 + cardGap / 2;
     communityCards.forEach((card, i) => {
-      const card3d = drawCardFace(card);
-      card3d.position.set(startX + i * cardGap - CARD_W / 2, LOGICAL_H * 0.38 - CARD_H / 2);
+      const card3d = drawCardFace(card, CARD_W_SM, CARD_H_SM);
+      card3d.position.set(startX + i * cardGap - CARD_W_SM / 2, LOGICAL_H * 0.36 - CARD_H_SM / 2);
       board.addChild(card3d);
     });
     if (communityCards.length === 0) {
@@ -264,7 +266,17 @@ export function PokerCanvas({ seats, communityCards, potTotal, handNumber, winne
     const total = seats.length;
     seats.forEach((seat, idx) => {
       const pos = seatPosition(idx, total, LOGICAL_W, LOGICAL_H);
+      // Each player's own chip pile, sized to their stack, sits just outside
+      // their seat (toward the rail) so you can read everyone's relative stack.
+      if (seat.player.stack > 0) {
+        const ox = pos.x + (pos.x - LOGICAL_W / 2) * 0.12;
+        const oy = pos.y + (pos.y - LOGICAL_H / 2) * 0.12 + (pos.y < LOGICAL_H / 2 ? -SEAT_BOX_H / 2 - 8 : SEAT_BOX_H / 2 + 22);
+        const pile = drawChipStack(seat.player.stack);
+        pile.position.set(ox, oy);
+        scene.addChild(pile);
+      }
       scene.addChild(buildSeatNode(seat, pos.x, pos.y));
+      // Chips this player has put in the pot this street, between them and the centre.
       if (seat.player.streetContributed > 0) {
         const chips = drawChipStack(seat.player.streetContributed);
         chips.position.set(pos.chipX, pos.chipY);
@@ -280,6 +292,19 @@ export function PokerCanvas({ seats, communityCards, potTotal, handNumber, winne
 
     const boxW = SEAT_BOX_W;
     const boxH = SEAT_BOX_H;
+
+    // Active player gets a soft golden glow halo so it's obvious whose turn it is.
+    if (isActing) {
+      for (let i = 3; i >= 1; i--) {
+        const glow = new Graphics();
+        const pad = i * 7;
+        glow
+          .roundRect(-boxW / 2 - pad, -boxH / 2 - pad, boxW + pad * 2, boxH + pad * 2, 14 + pad)
+          .fill({ color: theme.ACTING_RING, alpha: 0.08 });
+        c.addChild(glow);
+      }
+    }
+
     const panel = new Graphics();
     const borderColor = isWinner ? theme.WINNER_GOLD : isActing ? theme.ACTING_RING : theme.SEAT_BORDER;
     const borderWidth = isWinner || isActing ? 2.5 : 1;
@@ -444,14 +469,17 @@ export function PokerCanvas({ seats, communityCards, potTotal, handNumber, winne
     });
   }
 
-  // (4) Fold-to-muck: slide the folding player's two cards into the middle.
+  // (4) Fold-to-muck: toss the folding player's cards into the felt just in
+  // front of them (partway toward the centre), then fade out.
   function animateMuck(seatIdx: number) {
     const total = seats.length;
     const pos = seatPosition(seatIdx, total, LOGICAL_W, LOGICAL_H);
-    const center = { x: LOGICAL_W / 2 - CARD_W_SM / 2, y: LOGICAL_H * 0.5 - CARD_H_SM / 2 };
+    // 45% of the way from the seat toward the table centre.
+    const tossX = pos.x + (LOGICAL_W / 2 - pos.x) * 0.45;
+    const tossY = pos.y + (LOGICAL_H / 2 - pos.y) * 0.45;
     holeCardCorners(pos.x, pos.y).forEach((corner, i) => {
       const card = drawCardBack(CARD_W_SM, CARD_H_SM);
-      tween(card, corner, { x: center.x + i * 6, y: center.y }, { durMs: 420, fadeOut: true });
+      tween(card, corner, { x: tossX - CARD_W_SM / 2 + i * 10, y: tossY - CARD_H_SM / 2 + i * 4 }, { durMs: 480, fadeOut: true });
     });
   }
 

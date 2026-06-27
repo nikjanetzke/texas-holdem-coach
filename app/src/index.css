@@ -94,3 +94,38 @@
 .ring-acting {
   box-shadow: 0 0 0 2px rgba(250, 204, 21, 0.9), 0 0 14px 2px rgba(250, 204, 21, 0.35);
 }
+
+/* Coins/confetti flung upward for a win celebration. */
+@keyframes coinFly {
+  0% {
+    opacity: 0;
+    transform: translateY(0) scale(0.6) rotate(0deg);
+  }
+  15% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(var(--coin-rise, -240px)) translateX(var(--coin-drift, 0px)) scale(1.1) rotate(var(--coin-spin, 360deg));
+  }
+}
+.animate-coin {
+  animation: coinFly 1.6s ease-out forwards;
+}
+
+@keyframes popIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.7);
+  }
+  60% {
+    transform: scale(1.08);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.animate-pop {
+  animation: popIn 0.4s ease-out both;
+}

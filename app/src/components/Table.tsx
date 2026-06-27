@@ -1,4 +1,4 @@
-import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
+import { type CSSProperties, type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import type { GameSetup } from '../hooks/useGame';
 import { useGame } from '../hooks/useGame';
 import { HandHistoryPanel } from './HandHistoryPanel';
@@ -52,8 +52,13 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
   const [showCardRating, setShowCardRating] = useState(false);
   const [showMath, setShowMath] = useState(false);
   const [openPanel, setOpenPanel] = useState<'history' | 'export' | null>(null);
+  const [paused, setPaused] = useState(false);
+  const prevSecLeftRef = useRef<number | null>(null);
   const feltObserverRef = useRef<ResizeObserver | null>(null);
   const feltResizeRef = useRef<() => void>(() => {});
+  // Remembered so the end-of-game splash can tell champion (>0) from bust (0)
+  // even after the engine has been torn down.
+  const lastHumanStackRef = useRef<number>(setup.startingStack);
   const [canvasSize, setCanvasSize] = useState({ width: 880, height: 500 });
 
   // A callback ref (rather than useEffect on an empty-dep useRef) because the
@@ -151,6 +156,28 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
     if (currentActorId === 'human') setCoachRevealed(false);
   }, [currentActorId]);
 
+  // Countdown beeps: a tick at 10s left, then every second from 5 down to 1.
+  useEffect(() => {
+    const s = actionSecondsLeft;
+    const prev = prevSecLeftRef.current;
+    prevSecLeftRef.current = s;
+    if (s == null || prev == null || s >= prev) return;
+    if (s === 10 || (s >= 1 && s <= 5)) soundManager.play('click');
+  }, [actionSecondsLeft]);
+
+  // Auto-advance to the next hand a few seconds after a hand ends, unless paused.
+  // nextHand's identity changes every render, so we call it via a ref and key the
+  // effect on a stable boolean + handNumber — otherwise the 1s clock tick would
+  // re-run this effect and reset the timer before it could ever fire.
+  const nextHandRef = useRef(nextHand);
+  nextHandRef.current = nextHand;
+  const handOver = !!engine && engine.isHandOver();
+  useEffect(() => {
+    if (!handOver || paused) return;
+    const t = setTimeout(() => nextHandRef.current(), 3500);
+    return () => clearTimeout(t);
+  }, [handOver, paused, handNumber]);
+
   function toggleMuted() {
     const next = !muted;
     soundManager.setMuted(next);
@@ -167,11 +194,39 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
   }
 
   if (!engine) {
+    // The game can't continue: either you busted (game over) or you're the last
+    // player with chips (champion). We remembered your last stack below.
+    const won = lastHumanStackRef.current > 0;
     return (
-      <div className="flex h-screen flex-col items-center justify-center gap-4 text-slate-300">
-        <p>Not enough players have chips to continue.</p>
-        <button onClick={onExit} className="rounded bg-emerald-600 px-4 py-2 font-semibold hover:bg-emerald-500">
-          Back to setup
+      <div className="relative flex min-h-[100dvh] flex-col items-center justify-center gap-6 overflow-hidden bg-slate-950 px-4 text-center">
+        <div
+          className={`pointer-events-none absolute inset-0 ${
+            won
+              ? 'bg-[radial-gradient(ellipse_at_center,_rgba(234,179,8,0.25),_transparent_65%)]'
+              : 'bg-[radial-gradient(ellipse_at_center,_rgba(190,18,60,0.18),_transparent_65%)]'
+          }`}
+        />
+        {won && <CoinBurst />}
+        <div className="animate-pop relative">
+          {won ? (
+            <>
+              <div className="text-6xl">🏆</div>
+              <h1 className="mt-3 text-4xl font-extrabold text-amber-300">Champion!</h1>
+              <p className="mt-2 text-lg text-slate-200">You are the winner — everyone else is out of chips.</p>
+            </>
+          ) : (
+            <>
+              <div className="text-6xl">💀</div>
+              <h1 className="mt-3 text-4xl font-extrabold text-rose-400">Game over</h1>
+              <p className="mt-2 text-lg text-slate-300">You're out of chips. Better luck next time.</p>
+            </>
+          )}
+        </div>
+        <button
+          onClick={onExit}
+          className="relative rounded-xl bg-emerald-600 px-8 py-3 text-lg font-bold text-white shadow-lg hover:bg-emerald-500"
+        >
+          Play again
         </button>
       </div>
     );
@@ -179,6 +234,7 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
 
   const isHandOver = engine.isHandOver();
   const human = engine.players.find((p) => p.id === 'human')!;
+  lastHumanStackRef.current = human.stack;
   const leaks = leakTracker.topLeaks();
   const payouts = engine.showdownResult?.payouts ?? {};
   const bestHands = engine.showdownResult?.bestHandByPlayer ?? {};
@@ -215,7 +271,9 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
           </span>
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
-          <span className="hidden font-mono text-xs text-slate-400 sm:inline">Stack: {human.stack}</span>
+          <span className="rounded-lg bg-emerald-950/70 px-2.5 py-1 font-mono text-sm font-bold text-emerald-300 ring-1 ring-emerald-600/40">
+            💰 {human.stack}
+          </span>
           <button
             onClick={() => setCoachEnabled((v) => !v)}
             className={`rounded-full px-2 py-0.5 text-xs font-semibold transition-colors ${
@@ -233,6 +291,15 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
             {muted ? '🔇' : '🔊'}
           </button>
           <button
+            onClick={() => setPaused((v) => !v)}
+            className={`rounded-full px-2 py-0.5 text-xs font-semibold transition-colors ${
+              paused ? 'bg-amber-600 text-white hover:bg-amber-500' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+            }`}
+            title={paused ? 'Auto-advance paused — tap to resume' : 'Pause auto-advance between hands'}
+          >
+            {paused ? '▶' : '⏸'}
+          </button>
+          <button
             onClick={toggleFullscreen}
             className="rounded-full bg-slate-800 px-2 py-0.5 text-xs font-semibold text-slate-300 hover:bg-slate-700"
             title="Toggle fullscreen"
@@ -242,11 +309,12 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
         </div>
       </div>
 
-      {/* Win celebration — shows when you take down the pot. */}
+      {/* Win celebration — coin burst + banner when you take down the pot. */}
       {isHandOver && payouts['human'] > 0 && (
-        <div className="pointer-events-none fixed inset-x-0 top-1/4 z-30 flex justify-center px-4">
-          <div className="animate-fade-up rounded-2xl border-2 border-amber-400 bg-amber-500/95 px-8 py-4 text-center shadow-2xl shadow-amber-900/40">
-            <div className="text-2xl font-extrabold text-slate-900">🎉 You win {payouts['human']}!</div>
+        <div className="pointer-events-none fixed inset-0 z-30 flex items-start justify-center px-4 pt-[18vh]">
+          <CoinBurst />
+          <div className="animate-pop relative rounded-2xl border-2 border-amber-400 bg-amber-500/95 px-8 py-4 text-center shadow-2xl shadow-amber-900/50">
+            <div className="text-3xl font-extrabold text-slate-900">🎉 You win {payouts['human']}!</div>
             {bestHands['human'] && (
               <div className="mt-0.5 text-sm font-semibold text-slate-800">with {HAND_RANK_NAMES[bestHands['human'].rank]}</div>
             )}
@@ -348,9 +416,18 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
         );
       })()}
 
-      {/* Action bar */}
+      {/* Action bar — order-first keeps it directly under the table so the coach
+          panel can never push the buttons below the fold. */}
       {validActions && (
-        <div className="animate-fade-up mt-4 rounded-xl border border-slate-700 bg-slate-900/80 p-3">
+        <div className="animate-fade-up order-first mt-2 rounded-xl border border-emerald-600/50 bg-slate-900/90 p-3 ring-1 ring-emerald-500/30">
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-sm font-bold text-emerald-300">● Your turn</span>
+            {actionSecondsLeft != null && (
+              <span className={`font-mono text-sm font-bold ${actionSecondsLeft <= 5 ? 'text-rose-400' : 'text-slate-300'}`}>
+                {actionSecondsLeft}s
+              </span>
+            )}
+          </div>
           {actionSecondsLeft != null && (
             <div className="mb-3 h-1.5 w-full overflow-hidden rounded-full bg-slate-800">
               <div
@@ -378,6 +455,15 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
               )}
               {validActions.types.includes('raise') && (
                 <ActionButton label={`Raise to ${raiseAmount}`} tone="primary" onClick={() => humanAct('raise', raiseAmount)} />
+              )}
+              {(validActions.types.includes('bet') || validActions.types.includes('raise')) && (
+                <ActionButton
+                  label={`All in ${validActions.maxRaiseTo}`}
+                  tone="danger"
+                  onClick={() =>
+                    humanAct(validActions.types.includes('raise') ? 'raise' : 'bet', validActions.maxRaiseTo)
+                  }
+                />
               )}
             </div>
             {(validActions.types.includes('bet') || validActions.types.includes('raise')) && (
@@ -481,6 +567,30 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
       </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function CoinBurst() {
+  const icons = ['🪙', '💰', '✨', '💵', '🤑'];
+  const coins = Array.from({ length: 28 });
+  return (
+    <div className="pointer-events-none absolute inset-0 overflow-hidden">
+      {coins.map((_, i) => {
+        const style: CSSProperties = {
+          left: `${Math.random() * 100}%`,
+          top: `${35 + Math.random() * 20}%`,
+          animationDelay: `${Math.random() * 0.5}s`,
+          ['--coin-rise' as string]: `${-(160 + Math.random() * 280)}px`,
+          ['--coin-drift' as string]: `${(Math.random() - 0.5) * 180}px`,
+          ['--coin-spin' as string]: `${(Math.random() - 0.5) * 720}deg`,
+        };
+        return (
+          <span key={i} className="animate-coin absolute text-3xl" style={style}>
+            {icons[i % icons.length]}
+          </span>
+        );
+      })}
     </div>
   );
 }
