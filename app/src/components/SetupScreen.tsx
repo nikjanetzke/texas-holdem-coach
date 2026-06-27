@@ -20,16 +20,14 @@ export function SetupScreen({ onStart }: { onStart: (setup: GameSetup) => void }
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top,_rgba(16,89,55,0.45),_transparent_60%)]" />
       <div className="pointer-events-none absolute -top-24 left-1/2 h-[420px] w-[420px] -translate-x-1/2 rounded-full bg-emerald-700/20 blur-3xl" />
 
-      <div className={`relative mx-auto px-4 pt-16 pb-10 ${mode === 'train' ? 'max-w-lg' : 'max-w-md'}`}>
-        <div className="mb-8 text-center">
-          <div className="mb-3 flex justify-center gap-2 text-3xl">
-            <span>🂡</span>
-            <span className="text-amber-300">♠</span>
-            <span className="text-rose-400">♥</span>
-            <span>🂮</span>
-          </div>
-          <h1 className="text-3xl font-bold tracking-tight text-slate-50">Texas Hold'em Coach</h1>
-          <p className="mt-1 text-slate-400">Practice hands and get plain-English coaching as you play.</p>
+      <div className="relative mx-auto max-w-lg px-4 pt-12 pb-10">
+        <div className="mb-8">
+          <img
+            src="/assets/poker-iq-splash.jpg"
+            alt="Poker IQ — Texas Hold'em Coach"
+            className="w-full rounded-xl border border-slate-700 shadow-2xl shadow-black/50"
+          />
+          <p className="mt-3 text-center text-slate-400">Practice hands and get plain-English coaching as you play.</p>
         </div>
 
         <div className="rounded-xl border border-slate-700 bg-slate-900/90 p-6 text-slate-100 shadow-2xl shadow-black/40">

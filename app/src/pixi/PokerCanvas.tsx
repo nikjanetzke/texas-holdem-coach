@@ -96,6 +96,8 @@ export function PokerCanvas({ seats, communityCards, potTotal, handNumber, winne
   // Loaded portrait textures keyed by URL. A `null` entry means "tried and
   // failed to load" so we don't keep retrying a missing file every render.
   const portraitCache = useRef<Map<string, Texture | null>>(new Map());
+  // The felt-table background image; null until loaded (drawn felt is the fallback).
+  const tableTextureRef = useRef<Texture | null>(null);
 
   // Round avatar: a circular-masked portrait sprite if its texture is loaded,
   // otherwise the procedurally-drawn face. Always wrapped in an accent ring.
@@ -163,6 +165,18 @@ export function PokerCanvas({ seats, communityCards, potTotal, handNumber, winne
       // Pick up the latest width/height in case they changed while init() was pending.
       applySize(app, scene, sizeRef.current.width, sizeRef.current.height);
       renderScene();
+      // Load the felt-table background, then redraw with it once ready.
+      Assets.load<Texture>('/assets/green-felt-poker-table.jpg')
+        .then((tex) => {
+          if (destroyed) return;
+          tableTextureRef.current = tex;
+          try {
+            renderScene();
+          } catch (err) {
+            console.error('PokerCanvas render error', err);
+          }
+        })
+        .catch(() => {});
     })();
 
     return () => {
@@ -192,7 +206,22 @@ export function PokerCanvas({ seats, communityCards, potTotal, handNumber, winne
     scene.removeChildren();
     scene.scale.set(width / LOGICAL_W, height / LOGICAL_H);
 
-    scene.addChild(drawFelt(LOGICAL_W, LOGICAL_H));
+    const tableTex = tableTextureRef.current;
+    if (tableTex) {
+      // Cover-fit the felt image, then clip to a stadium (pill) shape matching
+      // the table's oval so the image's square white corners are masked away.
+      const sprite = new Sprite(tableTex);
+      sprite.anchor.set(0.5);
+      const scale = Math.max(LOGICAL_W / tableTex.width, LOGICAL_H / tableTex.height) * 1.02;
+      sprite.scale.set(scale);
+      sprite.position.set(LOGICAL_W / 2, LOGICAL_H / 2);
+      const mask = new Graphics();
+      mask.roundRect(2, 2, LOGICAL_W - 4, LOGICAL_H - 4, LOGICAL_H * 0.5).fill(0xffffff);
+      sprite.mask = mask;
+      scene.addChild(mask, sprite);
+    } else {
+      scene.addChild(drawFelt(LOGICAL_W, LOGICAL_H));
+    }
 
     // Community cards
     const board = new Container();
