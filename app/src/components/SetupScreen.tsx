@@ -6,6 +6,7 @@ import { SCENARIOS } from '../scenarios/scenarios';
 import { ChenTrainer } from './ChenTrainer';
 
 export function SetupScreen({ onStart }: { onStart: (setup: GameSetup) => void }) {
+  const [entered, setEntered] = useState(false);
   const [mode, setMode] = useState<'quick' | 'scenario' | 'train'>('quick');
   // Kept as strings so the fields can be cleared while typing (a numeric state
   // floored at the min would otherwise pin them at "0" and refuse to empty).
@@ -14,6 +15,30 @@ export function SetupScreen({ onStart }: { onStart: (setup: GameSetup) => void }
   const [scheduleId, setScheduleId] = useState(DEFAULT_SCHEDULE_ID);
   const [actionTimerSeconds, setActionTimerSeconds] = useState<number | null>(null);
 
+  // Landing splash: the full Poker IQ hero with a single Start button. Clicking
+  // through reveals the game menu (quick game / scenario / training).
+  if (!entered) {
+    return (
+      <div className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-slate-950 px-4">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,_rgba(16,89,55,0.45),_transparent_65%)]" />
+        <div className="relative w-full max-w-2xl text-center">
+          <img
+            src="/assets/poker-iq-splash.jpg"
+            alt="Poker IQ — Texas Hold'em Coach"
+            className="w-full rounded-2xl border border-slate-700 shadow-2xl shadow-black/60"
+          />
+          <button
+            onClick={() => setEntered(true)}
+            className="mt-8 rounded-xl bg-emerald-600 px-10 py-3 text-lg font-bold text-white shadow-lg shadow-emerald-900/40 transition-colors hover:bg-emerald-500"
+          >
+            Start
+          </button>
+          <p className="mt-4 text-sm text-slate-400">Practice hands and get plain-English coaching as you play.</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="relative min-h-screen overflow-hidden bg-slate-950">
       {/* Felt-and-card backdrop for a less "blank dashboard" first impression. */}
@@ -21,13 +46,13 @@ export function SetupScreen({ onStart }: { onStart: (setup: GameSetup) => void }
       <div className="pointer-events-none absolute -top-24 left-1/2 h-[420px] w-[420px] -translate-x-1/2 rounded-full bg-emerald-700/20 blur-3xl" />
 
       <div className="relative mx-auto max-w-lg px-4 pt-12 pb-10">
-        <div className="mb-8">
-          <img
-            src="/assets/poker-iq-splash.jpg"
-            alt="Poker IQ — Texas Hold'em Coach"
-            className="w-full rounded-xl border border-slate-700 shadow-2xl shadow-black/50"
-          />
-          <p className="mt-3 text-center text-slate-400">Practice hands and get plain-English coaching as you play.</p>
+        <div className="mb-6 flex items-center justify-between">
+          <h1 className="text-2xl font-extrabold tracking-tight text-slate-50">
+            Poker <span className="text-emerald-400">IQ</span>
+          </h1>
+          <button onClick={() => setEntered(false)} className="text-sm text-slate-400 hover:text-slate-200">
+            ← Splash
+          </button>
         </div>
 
         <div className="rounded-xl border border-slate-700 bg-slate-900/90 p-6 text-slate-100 shadow-2xl shadow-black/40">
