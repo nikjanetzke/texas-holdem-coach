@@ -81,6 +81,10 @@ function easeOutCubic(t: number): number {
   return 1 - Math.pow(1 - t, 3);
 }
 
+function clampN(v: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, v));
+}
+
 export function PokerCanvas({ seats, communityCards, potTotal, handNumber, winnerIds, width = LOGICAL_W, height = LOGICAL_H }: PokerCanvasProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<Application | null>(null);
@@ -266,14 +270,28 @@ export function PokerCanvas({ seats, communityCards, potTotal, handNumber, winne
     const total = seats.length;
     seats.forEach((seat, idx) => {
       const pos = seatPosition(idx, total, LOGICAL_W, LOGICAL_H);
-      // Each player's own chip pile, sized to their stack, sits just outside
-      // their seat (toward the rail) so you can read everyone's relative stack.
+      // Each player's own chip pile, sized to their stack, sits just inside their
+      // seat (toward the centre) so you can read everyone's relative stack.
+      // Clamped to stay on-canvas (top/bottom seats were getting clipped).
       if (seat.player.stack > 0) {
-        const ox = pos.x + (pos.x - LOGICAL_W / 2) * 0.12;
-        const oy = pos.y + (pos.y - LOGICAL_H / 2) * 0.12 + (pos.y < LOGICAL_H / 2 ? -SEAT_BOX_H / 2 - 8 : SEAT_BOX_H / 2 + 22);
+        const ox = clampN(pos.x + (LOGICAL_W / 2 - pos.x) * 0.18, 40, LOGICAL_W - 40);
+        const oy = clampN(pos.y + (LOGICAL_H / 2 - pos.y) * 0.18, 36, LOGICAL_H - 30);
         const pile = drawChipStack(seat.player.stack);
         pile.position.set(ox, oy);
         scene.addChild(pile);
+      }
+      // Folded players' cards are tossed onto the felt in front of them and stay
+      // there (face-down) for the rest of the hand, instead of sitting in the box.
+      if (seat.player.folded) {
+        const fx = pos.x + (LOGICAL_W / 2 - pos.x) * 0.42;
+        const fy = pos.y + (LOGICAL_H / 2 - pos.y) * 0.42;
+        for (let i = 0; i < 2; i++) {
+          const back = drawCardBack(CARD_W_SM * 0.8, CARD_H_SM * 0.8);
+          back.position.set(fx - CARD_W_SM * 0.8 + i * 16, fy - CARD_H_SM * 0.4 + i * 5);
+          back.rotation = (i === 0 ? -0.12 : 0.1);
+          back.alpha = 0.85;
+          scene.addChild(back);
+        }
       }
       scene.addChild(buildSeatNode(seat, pos.x, pos.y));
       // Chips this player has put in the pot this street, between them and the centre.
@@ -289,6 +307,8 @@ export function PokerCanvas({ seats, communityCards, potTotal, handNumber, winne
     const c = new Container();
     c.position.set(x, y);
     const { player, isDealer, isSmallBlind, isBigBlind, isActing, isWinner, showCards, handLabel } = seat;
+    // The active player's seat grows so it's unmistakable whose turn it is.
+    if (isActing) c.scale.set(1.14);
 
     const boxW = SEAT_BOX_W;
     const boxH = SEAT_BOX_H;
@@ -333,24 +353,27 @@ export function PokerCanvas({ seats, communityCards, potTotal, handNumber, winne
     stackText.position.set(textX, -boxH / 2 + 42);
     c.addChild(stackText);
 
-    // Hole cards, centered along the bottom of the box.
-    const cardsContainer = new Container();
-    const gap = CARD_W_SM + 6;
-    const cardY = SEAT_CARD_TOP;
-    if (player.holeCards.length === 0) {
-      const back1 = drawCardBack(CARD_W_SM, CARD_H_SM);
-      const back2 = drawCardBack(CARD_W_SM, CARD_H_SM);
-      back1.position.set(-gap / 2 - CARD_W_SM / 2, cardY);
-      back2.position.set(gap / 2 - CARD_W_SM / 2, cardY);
-      cardsContainer.addChild(back1, back2);
-    } else {
-      player.holeCards.forEach((card, i) => {
-        const node = showCards ? drawCardFace(card, CARD_W_SM, CARD_H_SM) : drawCardBack(CARD_W_SM, CARD_H_SM);
-        node.position.set((i === 0 ? -gap / 2 : gap / 2) - CARD_W_SM / 2, cardY);
-        cardsContainer.addChild(node);
-      });
+    // Hole cards, centered along the bottom of the box. Folded players have no
+    // cards here — they've been tossed onto the felt in front of them.
+    if (!player.folded) {
+      const cardsContainer = new Container();
+      const gap = CARD_W_SM + 6;
+      const cardY = SEAT_CARD_TOP;
+      if (player.holeCards.length === 0) {
+        const back1 = drawCardBack(CARD_W_SM, CARD_H_SM);
+        const back2 = drawCardBack(CARD_W_SM, CARD_H_SM);
+        back1.position.set(-gap / 2 - CARD_W_SM / 2, cardY);
+        back2.position.set(gap / 2 - CARD_W_SM / 2, cardY);
+        cardsContainer.addChild(back1, back2);
+      } else {
+        player.holeCards.forEach((card, i) => {
+          const node = showCards ? drawCardFace(card, CARD_W_SM, CARD_H_SM) : drawCardBack(CARD_W_SM, CARD_H_SM);
+          node.position.set((i === 0 ? -gap / 2 : gap / 2) - CARD_W_SM / 2, cardY);
+          cardsContainer.addChild(node);
+        });
+      }
+      c.addChild(cardsContainer);
     }
-    c.addChild(cardsContainer);
 
     // Badges
     let badgeX = boxW / 2 - 10;

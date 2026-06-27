@@ -5,6 +5,11 @@ import * as theme from './theme';
 const SUIT_SYMBOLS: Record<Card['suit'], string> = { s: '♠', h: '♥', d: '♦', c: '♣' };
 const RED_SUITS = new Set(['h', 'd']);
 
+// Cards store the ten as 'T'; players expect to see "10".
+export function rankLabel(rank: Card['rank']): string {
+  return rank === 'T' ? '10' : rank;
+}
+
 export const CARD_W = 78;
 export const CARD_H = 110;
 export const CARD_W_SM = 57;
@@ -35,10 +40,12 @@ export function drawCardFace(card: Card, w = CARD_W, h = CARD_H): Container {
   g.roundRect(0, 0, w, h, 6).fill(theme.CARD_WHITE).stroke({ width: 1, color: 0x000000, alpha: 0.3 });
   c.addChild(g);
 
-  const rankStyle = new TextStyle({ fontFamily: 'Georgia, serif', fontSize: w * 0.44, fontWeight: 'bold', fill: color });
+  const label = rankLabel(card.rank);
+  // The two-character "10" needs a slightly smaller glyph to fit the card width.
+  const rankStyle = new TextStyle({ fontFamily: 'Georgia, serif', fontSize: w * (label.length > 1 ? 0.34 : 0.44), fontWeight: 'bold', fill: color });
   const suitStyle = new TextStyle({ fontFamily: 'Georgia, serif', fontSize: w * 0.66, fill: color });
 
-  const rankText = new Text({ text: card.rank, style: rankStyle });
+  const rankText = new Text({ text: label, style: rankStyle });
   rankText.anchor.set(0.5, 0);
   rankText.position.set(w / 2, h * 0.04);
   c.addChild(rankText);

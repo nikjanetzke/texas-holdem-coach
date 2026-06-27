@@ -1,6 +1,7 @@
 import type { GameSetup, SeatConfig } from '../hooks/useGame';
 import { AI_ARCHETYPES } from '../ai/profiles';
 import type { AIProfile } from '../ai/profiles';
+import { CHARACTERS } from '../ai/characters';
 import type { LuckBand } from '../engine/preflop';
 
 export interface Scenario {
@@ -10,10 +11,23 @@ export interface Scenario {
   build: () => GameSetup;
 }
 
+// Map each old archetype to named characters whose play style matches, so
+// scenarios feature the recurring cast (with photos) instead of generic bots.
+const CHAR = (id: string) => CHARACTERS.find((c) => c.id === id)!;
+const POOLS: Record<string, AIProfile[]> = {
+  tight: [CHAR('eleanor'), CHAR('nadia'), CHAR('tex')],
+  looseAggressive: [CHAR('marco'), CHAR('spike'), CHAR('bruno')],
+  callingStation: [CHAR('leo'), CHAR('danny')],
+};
+
 let seatCounter = 0;
 function ai(profile: AIProfile, stack: number): SeatConfig {
   seatCounter++;
-  return { id: `ai-${seatCounter}`, name: `${profile.name} ${seatCounter}`, isHuman: false, profile, stack };
+  // Pick a character of the matching style; cycle through the pool so repeated
+  // archetypes in one scenario get different faces.
+  const pool = POOLS[profile.id] ?? CHARACTERS;
+  const character = pool[seatCounter % pool.length];
+  return { id: `ai-${seatCounter}`, name: character.shortName, isHuman: false, profile: character, stack };
 }
 function human(stack: number): SeatConfig {
   return { id: 'human', name: 'You', isHuman: true, stack };

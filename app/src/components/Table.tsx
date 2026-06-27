@@ -271,8 +271,14 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
           </span>
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
-          <span className="rounded-lg bg-emerald-950/70 px-2.5 py-1 font-mono text-sm font-bold text-emerald-300 ring-1 ring-emerald-600/40">
+          <span className="flex items-center gap-1.5 rounded-lg bg-emerald-950/70 px-2.5 py-1 font-mono text-sm font-bold text-emerald-300 ring-1 ring-emerald-600/40">
             💰 {human.stack}
+            {human.stack !== setup.startingStack && (
+              <span className={human.stack > setup.startingStack ? 'text-emerald-400' : 'text-rose-400'}>
+                ({human.stack > setup.startingStack ? '+' : ''}
+                {human.stack - setup.startingStack})
+              </span>
+            )}
           </span>
           <button
             onClick={() => setCoachEnabled((v) => !v)}
@@ -301,10 +307,10 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
           </button>
           <button
             onClick={toggleFullscreen}
-            className="rounded-full bg-slate-800 px-2 py-0.5 text-xs font-semibold text-slate-300 hover:bg-slate-700"
+            className="flex items-center gap-1 rounded-lg bg-slate-700 px-2.5 py-1 text-xs font-semibold text-slate-100 ring-1 ring-slate-500 hover:bg-slate-600"
             title="Toggle fullscreen"
           >
-            ⛶
+            <span className="text-sm">⛶</span> Full
           </button>
         </div>
       </div>
@@ -637,11 +643,16 @@ function MathBreakdown({ math, suggested }: { math: CoachMath; suggested: Action
   const beatsOdds = equity >= math.potOddsPercent;
   return (
     <div className="mt-2 space-y-2 rounded-lg border border-slate-700 bg-slate-950/50 p-2.5 text-xs text-slate-300">
+      <p className="text-slate-400">
+        Simple version: compare <span className="text-emerald-300">how often you win</span> (equity) with{' '}
+        <span className="text-amber-300">the price you're paying</span> (pot odds). If you win more often than the price,
+        calling makes money over time.
+      </p>
       <div>
         <div className="font-semibold text-slate-200">1. Equity — your chance to win</div>
         <p className="mt-0.5 text-slate-400">
-          Simulated {math.iterations.toLocaleString()} random run-outs against {math.numOpponents} opponent
-          {math.numOpponents === 1 ? '' : 's'}:
+          We deal out the rest of the board {math.iterations.toLocaleString()} times at random against{' '}
+          {math.numOpponents} opponent{math.numOpponents === 1 ? '' : 's'} and count how often you'd win:
         </p>
         <p className="mt-0.5 font-mono">
           win {math.winPercent.toFixed(1)}% + (tie {math.tiePercent.toFixed(1)}% ÷ 2) ={' '}
@@ -681,6 +692,14 @@ function MathBreakdown({ math, suggested }: { math: CoachMath; suggested: Action
           </p>
         </div>
       )}
+      <div className="border-t border-slate-800 pt-2">
+        <div className="font-semibold text-slate-200">Quick mental shortcut: the rule of 2 &amp; 4</div>
+        <p className="mt-0.5 text-slate-400">
+          Count your <span className="text-slate-200">outs</span> (cards that make your hand). On the flop, × 4 ≈ your %
+          to hit by the river; on the turn, × 2. Example: two diamonds + two on the flop = 9 more diamonds (13 − 4) ≈ 9
+          outs → 9 × 4 ≈ <span className="text-emerald-300">36%</span> to make the flush.
+        </p>
+      </div>
     </div>
   );
 }
@@ -694,11 +713,12 @@ function chenLabel(score: number): { label: string; tone: string } {
 }
 
 const SUIT_CHARS: Record<Card['suit'], string> = { s: '♠', h: '♥', d: '♦', c: '♣' };
+const rankLabel = (r: Card['rank']) => (r === 'T' ? '10' : r);
 
 function StartingHandRating({ cards, open, onToggle }: { cards: Card[]; open: boolean; onToggle: () => void }) {
   const score = chenScore(cards);
   const { label, tone } = chenLabel(score);
-  const text = cards.map((c) => `${c.rank}${SUIT_CHARS[c.suit]}`).join(' ');
+  const text = cards.map((c) => `${rankLabel(c.rank)}${SUIT_CHARS[c.suit]}`).join(' ');
   return (
     <div className="mt-4 rounded-xl border border-slate-700 bg-slate-900/60 text-sm">
       <button onClick={onToggle} className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left">

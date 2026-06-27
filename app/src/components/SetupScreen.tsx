@@ -22,24 +22,27 @@ export function SetupScreen({ onStart }: { onStart: (setup: GameSetup) => void }
       <div className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-slate-950 px-4">
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,_rgba(16,89,55,0.45),_transparent_65%)]" />
         <div className="relative w-full max-w-2xl text-center">
-          <img
-            src="/assets/poker-iq-splash.jpg"
-            alt="Poker IQ — Texas Hold'em Coach"
-            className="w-full rounded-2xl border border-slate-700 shadow-2xl shadow-black/60"
-          />
-          <button
-            onClick={() => {
-              // This tap is a user gesture, so we can request fullscreen here —
-              // on Android/Chrome this hides the OS status bar and URL bar for a
-              // true edge-to-edge game. (iOS Safari ignores it; use Add to Home
-              // Screen there for the same effect.)
-              document.documentElement.requestFullscreen?.().catch(() => {});
-              setEntered(true);
-            }}
-            className="mt-8 rounded-xl bg-emerald-600 px-10 py-3 text-lg font-bold text-white shadow-lg shadow-emerald-900/40 transition-colors hover:bg-emerald-500"
-          >
-            Start
-          </button>
+          <div className="relative">
+            <img
+              src="/assets/poker-iq-splash.jpg"
+              alt="Poker IQ — Texas Hold'em Coach"
+              className="w-full rounded-2xl border border-slate-700 shadow-2xl shadow-black/60"
+            />
+            {/* Start sits over the image so it's always visible without scrolling. */}
+            <button
+              onClick={() => {
+                // This tap is a user gesture, so we can request fullscreen here —
+                // on Android/Chrome this hides the OS status bar and URL bar for a
+                // true edge-to-edge game. (iOS Safari ignores it; use Add to Home
+                // Screen there for the same effect.)
+                document.documentElement.requestFullscreen?.().catch(() => {});
+                setEntered(true);
+              }}
+              className="absolute bottom-4 left-1/2 -translate-x-1/2 rounded-xl bg-emerald-600 px-12 py-3 text-lg font-bold text-white shadow-lg shadow-black/50 ring-2 ring-emerald-300/50 transition-colors hover:bg-emerald-500"
+            >
+              ▶ Start
+            </button>
+          </div>
           <p className="mt-4 text-sm text-slate-400">Practice hands and get plain-English coaching as you play.</p>
         </div>
       </div>

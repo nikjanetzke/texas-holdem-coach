@@ -69,18 +69,25 @@ export function chenBreakdown(holeCards: Card[]): { score: number; steps: ChenSt
   const low = Math.min(va, vb);
   const highRank = va >= vb ? a.rank : b.rank;
 
-  let score = chenCardPoints(high);
-  steps.push({ label: `High card (${highRank}) base points`, delta: `${score}`, running: score });
+  const base = chenCardPoints(high);
+  let score = base;
+  steps.push({ label: `Highest card (${highRank}) is worth`, delta: `${base}`, running: score });
 
   if (va === vb) {
-    const doubled = Math.max(score * 2, 5);
-    steps.push({ label: 'Pair: double the points (minimum 5)', delta: '×2', running: doubled });
+    const doubled = Math.max(base * 2, 5);
+    steps.push({
+      label: doubled === 5 && base * 2 < 5 ? `Pair: ${base} × 2 = ${base * 2}, but minimum is 5` : `It's a pair: ${base} × 2`,
+      delta: '×2',
+      running: doubled,
+    });
     score = doubled;
   } else {
     if (a.suit === b.suit) {
       score += 2;
-      steps.push({ label: 'Suited bonus', delta: '+2', running: score });
+      steps.push({ label: 'Same suit (flush potential)', delta: '+2', running: score });
     }
+    // "Gap" = how many ranks sit BETWEEN the two cards (not the rank difference).
+    // e.g. K-T has Q and J between it → a 2-gap.
     const gap = high - low - 1;
     let penalty = 0;
     if (gap === 1) penalty = 1;
@@ -88,12 +95,12 @@ export function chenBreakdown(holeCards: Card[]): { score: number; steps: ChenSt
     else if (gap === 3) penalty = 4;
     else if (gap >= 4) penalty = 5;
     if (penalty > 0) {
+      steps.push({ label: `${gap} card${gap === 1 ? '' : 's'} between them`, delta: `-${penalty}`, running: score - penalty });
       score -= penalty;
-      steps.push({ label: `Gap of ${gap} card${gap === 1 ? '' : 's'} penalty`, delta: `-${penalty}`, running: score });
     }
     if (gap <= 1 && high < 12) {
       score += 1;
-      steps.push({ label: 'Straight bonus (0–1 gap, both below Q)', delta: '+1', running: score });
+      steps.push({ label: 'Close + low (easy straights)', delta: '+1', running: score });
     }
   }
 
