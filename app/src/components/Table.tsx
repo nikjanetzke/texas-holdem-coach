@@ -367,7 +367,7 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
               src="/assets/poker-animation.gif"
               alt=""
               onError={() => setWinGifFailed(true)}
-              className="animate-pop relative mb-4 w-72 max-w-[80vw] rounded-2xl shadow-2xl shadow-black/50"
+              className="animate-pop relative mb-4 w-48 max-w-[55vw] rounded-2xl shadow-2xl shadow-black/50"
             />
           )}
           <div className="animate-pop relative rounded-2xl border-2 border-amber-400 bg-amber-500/95 px-8 py-4 text-center shadow-2xl shadow-amber-900/50">

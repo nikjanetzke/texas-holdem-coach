@@ -50,23 +50,31 @@ export function SetupScreen({ onStart }: { onStart: (setup: GameSetup) => void }
   }
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-slate-950">
-      {/* Felt-and-card backdrop for a less "blank dashboard" first impression. */}
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top,_rgba(16,89,55,0.45),_transparent_60%)]" />
-      <div className="pointer-events-none absolute -top-24 left-1/2 h-[420px] w-[420px] -translate-x-1/2 rounded-full bg-emerald-700/20 blur-3xl" />
+    <div className="relative min-h-[100dvh] overflow-hidden bg-slate-950">
+      {/* Layered casino backdrop: green felt glow up top, warm gold glow below. */}
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_50%_-10%,_rgba(16,120,72,0.5),_transparent_60%)]" />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_50%_120%,_rgba(212,175,55,0.12),_transparent_55%)]" />
+      <div className="pointer-events-none absolute -top-32 left-1/2 h-[520px] w-[520px] -translate-x-1/2 rounded-full bg-emerald-600/20 blur-3xl" />
+      <div className="pointer-events-none absolute bottom-0 left-1/2 h-[300px] w-[760px] -translate-x-1/2 rounded-full bg-amber-500/[0.06] blur-3xl" />
 
-      <div className="relative mx-auto max-w-lg px-4 pt-12 pb-10">
-        <div className="mb-6 flex items-center justify-between">
-          <h1 className="text-2xl font-extrabold tracking-tight text-slate-50">
-            Poker <span className="text-emerald-400">IQ</span>
+      <div className="relative mx-auto max-w-lg px-4 pt-10 pb-12">
+        <div className="mb-6 flex items-end justify-between">
+          <h1 className="text-3xl font-black tracking-tight drop-shadow-[0_2px_8px_rgba(0,0,0,0.5)]">
+            <span className="bg-gradient-to-b from-amber-200 to-amber-500 bg-clip-text text-transparent">Poker</span>
+            <span className="ml-1.5 bg-gradient-to-b from-emerald-300 to-emerald-500 bg-clip-text text-transparent">IQ</span>
           </h1>
-          <button onClick={() => setEntered(false)} className="text-sm text-slate-400 hover:text-slate-200">
+          <button
+            onClick={() => setEntered(false)}
+            className="rounded-full px-3 py-1 text-sm text-slate-400 ring-1 ring-slate-700/60 transition-colors hover:bg-slate-800/60 hover:text-slate-100"
+          >
             ← Splash
           </button>
         </div>
 
-        <div className="rounded-xl border border-slate-700 bg-slate-900/90 p-6 text-slate-100 shadow-2xl shadow-black/40">
-          <div className="mb-6 flex rounded-lg bg-slate-800 p-1">
+        {/* Premium glass panel with a gold top edge. */}
+        <div className="relative overflow-hidden rounded-2xl border border-amber-500/20 bg-gradient-to-b from-slate-900/95 to-slate-950/95 p-6 text-slate-100 shadow-[0_24px_70px_-20px_rgba(0,0,0,0.85)] ring-1 ring-white/5">
+          <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-amber-400/70 to-transparent" />
+          <div className="mb-6 flex gap-1 rounded-xl bg-slate-950/60 p-1 ring-1 ring-slate-700/50">
             <ModeTab label="Quick game" active={mode === 'quick'} onClick={() => setMode('quick')} />
             <ModeTab label="Scenario" active={mode === 'scenario'} onClick={() => setMode('scenario')} />
             <ModeTab label="Training" active={mode === 'train'} onClick={() => setMode('train')} />
@@ -75,15 +83,19 @@ export function SetupScreen({ onStart }: { onStart: (setup: GameSetup) => void }
           {mode === 'train' ? (
             <ChenTrainer />
           ) : mode === 'scenario' ? (
-            <div className="space-y-2">
+            <div className="space-y-2.5">
               {SCENARIOS.map((s) => (
                 <button
                   key={s.id}
                   onClick={() => onStart(s.build())}
-                  className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-left transition-colors hover:border-emerald-500 hover:bg-slate-700"
+                  className="group relative flex w-full items-center gap-3 overflow-hidden rounded-xl border border-slate-700/70 bg-slate-800/50 px-4 py-3 text-left transition-all hover:border-emerald-500/70 hover:bg-slate-800"
                 >
-                  <div className="font-semibold">{s.name}</div>
-                  <div className="text-xs text-slate-400">{s.description}</div>
+                  <span className="absolute inset-y-0 left-0 w-1 bg-gradient-to-b from-emerald-400 to-emerald-600 opacity-0 transition-opacity group-hover:opacity-100" />
+                  <span className="flex-1">
+                    <span className="block font-semibold text-slate-100">{s.name}</span>
+                    <span className="block text-xs text-slate-400">{s.description}</span>
+                  </span>
+                  <span className="text-slate-600 transition-colors group-hover:text-emerald-400">→</span>
                 </button>
               ))}
             </div>
@@ -118,8 +130,10 @@ function ModeTab({ label, active, onClick }: { label: string; active: boolean; o
   return (
     <button
       onClick={onClick}
-      className={`flex-1 rounded-md px-3 py-1.5 text-sm font-semibold transition-colors ${
-        active ? 'bg-emerald-600 text-white' : 'text-slate-300 hover:text-white'
+      className={`flex-1 rounded-lg px-3 py-2 text-sm font-semibold transition-all ${
+        active
+          ? 'bg-gradient-to-b from-emerald-500 to-emerald-700 text-white shadow-lg shadow-emerald-900/40 ring-1 ring-emerald-400/40'
+          : 'text-slate-300 hover:bg-slate-800/60 hover:text-white'
       }`}
     >
       {label}
@@ -150,31 +164,32 @@ function QuickGameForm({
 }) {
   return (
     <>
-      <label className="block mb-4">
-        <span className="block text-sm text-slate-300 mb-1">Number of players (2-10)</span>
-        <input
-          type="number"
-          min={2}
-          max={10}
-          value={numPlayers}
-          onChange={(e) => setNumPlayers(e.target.value)}
-          onBlur={(e) => setNumPlayers(String(clampInt(e.target.value, 2, 10, 6)))}
-          className="w-full rounded bg-slate-800 border border-slate-600 px-3 py-2"
-        />
-      </label>
-
-      <label className="block mb-4">
-        <span className="block text-sm text-slate-300 mb-1">Starting chips</span>
-        <input
-          type="number"
-          min={100}
-          step={100}
-          value={startingStack}
-          onChange={(e) => setStartingStack(e.target.value)}
-          onBlur={(e) => setStartingStack(String(clampInt(e.target.value, 100, 1_000_000, 1000)))}
-          className="w-full rounded bg-slate-800 border border-slate-600 px-3 py-2"
-        />
-      </label>
+      <div className="mb-4 grid grid-cols-2 gap-3">
+        <label className="block">
+          <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-slate-400">Players (2-10)</span>
+          <input
+            type="number"
+            min={2}
+            max={10}
+            value={numPlayers}
+            onChange={(e) => setNumPlayers(e.target.value)}
+            onBlur={(e) => setNumPlayers(String(clampInt(e.target.value, 2, 10, 6)))}
+            className="w-full rounded-lg border border-slate-600 bg-slate-800/80 px-3 py-2 font-mono outline-none transition-colors focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/30"
+          />
+        </label>
+        <label className="block">
+          <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-slate-400">Starting chips</span>
+          <input
+            type="number"
+            min={100}
+            step={100}
+            value={startingStack}
+            onChange={(e) => setStartingStack(e.target.value)}
+            onBlur={(e) => setStartingStack(String(clampInt(e.target.value, 100, 1_000_000, 1000)))}
+            className="w-full rounded-lg border border-slate-600 bg-slate-800/80 px-3 py-2 font-mono outline-none transition-colors focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/30"
+          />
+        </label>
+      </div>
 
       <div className="block mb-6">
         <span className="block text-sm text-slate-300 mb-2">Blind schedule</span>
@@ -235,7 +250,7 @@ function QuickGameForm({
       </label>
 
       <button
-        className="w-full rounded bg-emerald-600 hover:bg-emerald-500 transition-colors py-2 font-semibold"
+        className="w-full rounded-xl bg-gradient-to-b from-emerald-500 to-emerald-700 py-3 text-base font-bold text-white shadow-lg shadow-emerald-900/40 ring-1 ring-emerald-400/40 transition-all hover:from-emerald-400 hover:to-emerald-600 active:scale-[0.99]"
         onClick={() =>
           onStart({
             seats: buildDefaultSeats(clampInt(numPlayers, 2, 10, 6)),
@@ -245,7 +260,7 @@ function QuickGameForm({
           })
         }
       >
-        Start playing
+        ♠ Start playing
       </button>
     </>
   );
