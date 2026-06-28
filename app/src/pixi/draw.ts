@@ -90,7 +90,7 @@ function drawChip(c: Container, x: number, y: number, color: number, ring: numbe
   }
 }
 
-export function drawChipStack(amount: number): Container {
+export function drawChipStack(amount: number, showLabel = true): Container {
   const c = new Container();
   // Up to 20 chips so larger stacks visibly grow (≈10 tiers from tiny to huge).
   const chips = theme.chipBreakdown(amount, 20);
@@ -113,17 +113,19 @@ export function drawChipStack(amount: number): Container {
     tallest = Math.max(tallest, colHeight);
   });
 
-  const labelStyle = new TextStyle({
-    fontFamily: 'system-ui, sans-serif',
-    fontSize: 12,
-    fontWeight: 'bold',
-    fill: theme.GOLD_BRIGHT,
-    stroke: { color: 0x000000, width: 3 },
-  });
-  const label = new Text({ text: `$${amount.toLocaleString()}`, style: labelStyle });
-  label.anchor.set(0.5, 1);
-  label.position.set(0, -tallest * CHIP_TH - 12);
-  c.addChild(label);
+  if (showLabel) {
+    const labelStyle = new TextStyle({
+      fontFamily: 'system-ui, sans-serif',
+      fontSize: 12,
+      fontWeight: 'bold',
+      fill: theme.GOLD_BRIGHT,
+      stroke: { color: 0x000000, width: 3 },
+    });
+    const label = new Text({ text: `$${amount.toLocaleString()}`, style: labelStyle });
+    label.anchor.set(0.5, 1);
+    label.position.set(0, -tallest * CHIP_TH - 12);
+    c.addChild(label);
+  }
 
   return c;
 }

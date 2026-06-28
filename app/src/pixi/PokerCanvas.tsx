@@ -308,9 +308,11 @@ export function PokerCanvas({ seats, communityCards, potTotal, handNumber, winne
     c.position.set(x, y);
     const { player, isDealer, isSmallBlind, isBigBlind, isActing, isWinner, showCards, handLabel } = seat;
     const isHuman = player.id === 'human';
-    // Crowded tables shrink every seat. On their turn, the HUMAN's whole seat
-    // grows (we read our own cards); for opponents only their portrait grows.
-    c.scale.set(isActing && isHuman ? seatScale * 1.12 : seatScale);
+    // Opponents shrink on crowded tables; the human's seat stays full size so our
+    // cards always match the community cards. On their turn, the human's whole
+    // seat grows a touch; for opponents only their portrait grows.
+    const base = isHuman ? 1 : seatScale;
+    c.scale.set(isActing && isHuman ? base * 1.12 : base);
     if (player.folded) c.alpha = 0.5;
 
     const boxW = SEAT_BOX_W;
@@ -383,7 +385,7 @@ export function PokerCanvas({ seats, communityCards, potTotal, handNumber, winne
     // The player's own chip pile (sized to their stack), tucked into the lower-right
     // of the seat where the cards never reach — chips are never drawn over cards.
     if (player.stack > 0) {
-      const pile = drawChipStack(player.stack);
+      const pile = drawChipStack(player.stack, false); // no $ label — the stack text already shows it
       pile.scale.set(0.55);
       pile.position.set(boxW / 2 - 12, boxH / 2 - 14);
       c.addChild(pile);

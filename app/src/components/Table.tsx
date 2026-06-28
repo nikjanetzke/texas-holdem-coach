@@ -169,15 +169,18 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
     if (s === 10 || (s >= 1 && s <= 5)) soundManager.play('click');
   }, [actionSecondsLeft]);
 
-  // Read the coach's suggestion aloud (Web Speech API) when it's revealed on
-  // your turn — once per turn, only while speech is on.
+  // Read the coach's read aloud (Web Speech API) on your turn — once per turn,
+  // whenever speech is on and the advice has been computed. Independent of the
+  // coach panel / reveal gate so you always hear something.
   useEffect(() => {
-    if (!speechOn || !coachEnabled || engine?.isHandOver()) return;
-    if (currentActorId !== 'human' || !advice || !coachRevealed) return;
+    if (!speechOn || engine?.isHandOver()) return;
+    if (currentActorId !== 'human' || !advice) return;
     if (spokenTurnRef.current === handNumber) return;
     spokenTurnRef.current = handNumber;
-    speak(`Coach suggests ${advice.suggestedAction}. ${advice.reasoning[0] ?? ''}`);
-  }, [speechOn, coachEnabled, currentActorId, engine, advice, coachRevealed, handNumber]);
+    speak(
+      `It's your turn. Coach suggests ${advice.suggestedAction}. ${advice.reasoning[0] ?? ''}`,
+    );
+  }, [speechOn, currentActorId, engine, advice, handNumber]);
 
   // Allow a fresh spoken suggestion each time it returns to your turn.
   useEffect(() => {
