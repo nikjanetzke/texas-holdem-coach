@@ -39,7 +39,7 @@ function seatPosition(index: number, total: number, w: number, h: number) {
   // Vertical spread kept tight enough that the tall seat boxes at the top and
   // bottom of the oval stay fully on-canvas (heads no longer clipped).
   const x = w / 2 + (w * 0.41) * Math.sin(theta);
-  const y = h / 2 + (h * 0.33) * Math.cos(theta);
+  const y = h / 2 + (h * 0.345) * Math.cos(theta);
   const chipX = x + (w / 2 - x) * 0.32;
   const chipY = y + (h / 2 - y) * 0.32;
   return { x, y, chipX, chipY };
@@ -239,16 +239,17 @@ export function PokerCanvas({ seats, communityCards, potTotal, handNumber, winne
     const board = new Container();
     const cardGap = CARD_W_SM + 8;
     const startX = LOGICAL_W / 2 - (communityCards.length * cardGap) / 2 + cardGap / 2;
+    const boardY = LOGICAL_H * 0.43; // moved down toward the centre, clear of the top seat
     communityCards.forEach((card, i) => {
       const card3d = drawCardFace(card, CARD_W_SM, CARD_H_SM);
-      card3d.position.set(startX + i * cardGap - CARD_W_SM / 2, LOGICAL_H * 0.36 - CARD_H_SM / 2);
+      card3d.position.set(startX + i * cardGap - CARD_W_SM / 2, boardY - CARD_H_SM / 2);
       board.addChild(card3d);
     });
     if (communityCards.length === 0) {
-      const style = new TextStyle({ fontFamily: 'Georgia, serif', fontSize: 14, fill: 0x9fe3bd, fontStyle: 'italic' });
+      const style = new TextStyle({ fontFamily: 'Georgia, serif', fontSize: 16, fill: 0x9fe3bd, fontStyle: 'italic' });
       const t = new Text({ text: '— pre-flop —', style });
       t.anchor.set(0.5);
-      t.position.set(LOGICAL_W / 2, LOGICAL_H * 0.38);
+      t.position.set(LOGICAL_W / 2, boardY);
       board.addChild(t);
     }
     scene.addChild(board);
@@ -256,7 +257,7 @@ export function PokerCanvas({ seats, communityCards, potTotal, handNumber, winne
     // Pot badge
     const potG = new Graphics();
     const potLabel = new Text({
-      text: `Pot: ${potTotal}`,
+      text: `Pot: $${potTotal}`,
       style: new TextStyle({ fontFamily: 'system-ui, sans-serif', fontSize: 14, fontWeight: 'bold', fill: theme.GOLD_BRIGHT }),
     });
     potLabel.anchor.set(0.5);
@@ -264,7 +265,7 @@ export function PokerCanvas({ seats, communityCards, potTotal, handNumber, winne
     potG.roundRect(-potW / 2, -12, potW, 24, 12).fill({ color: 0x000000, alpha: 0.55 }).stroke({ width: 1, color: theme.GOLD, alpha: 0.5 });
     const potContainer = new Container();
     potContainer.addChild(potG, potLabel);
-    potContainer.position.set(LOGICAL_W / 2, LOGICAL_H * 0.52);
+    potContainer.position.set(LOGICAL_W / 2, LOGICAL_H * 0.6);
     scene.addChild(potContainer);
 
     const total = seats.length;
@@ -339,18 +340,18 @@ export function PokerCanvas({ seats, communityCards, potTotal, handNumber, winne
 
     // Name and stack stack vertically to the right of the (now larger) avatar.
     const textX = -boxW / 2 + 8 + avatarRadius * 2 + 8;
-    const nameStyle = new TextStyle({ fontFamily: 'system-ui, sans-serif', fontSize: 14, fontWeight: 'bold', fill: 0xe5e7eb });
+    const nameStyle = new TextStyle({ fontFamily: 'system-ui, sans-serif', fontSize: 18, fontWeight: 'bold', fill: 0xe5e7eb });
     const nameText = new Text({ text: truncateName(player.name, 10), style: nameStyle });
     nameText.anchor.set(0, 0.5);
-    nameText.position.set(textX, -boxH / 2 + 22);
+    nameText.position.set(textX, -boxH / 2 + 24);
     const maxNameWidth = boxW / 2 - textX - 6; // remaining width to the right edge
     if (nameText.width > maxNameWidth) nameText.scale.set(maxNameWidth / nameText.width, 1);
     c.addChild(nameText);
 
-    const stackStyle = new TextStyle({ fontFamily: 'monospace', fontSize: 14, fontWeight: 'bold', fill: 0x6ee7b7 });
-    const stackText = new Text({ text: String(player.stack), style: stackStyle });
+    const stackStyle = new TextStyle({ fontFamily: 'monospace', fontSize: 17, fontWeight: 'bold', fill: 0x6ee7b7 });
+    const stackText = new Text({ text: `$${player.stack}`, style: stackStyle });
     stackText.anchor.set(0, 0.5);
-    stackText.position.set(textX, -boxH / 2 + 42);
+    stackText.position.set(textX, -boxH / 2 + 46);
     c.addChild(stackText);
 
     // Hole cards, centered along the bottom of the box. Folded players have no

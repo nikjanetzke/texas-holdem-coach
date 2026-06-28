@@ -271,12 +271,11 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
           </span>
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
-          <span className="flex items-center gap-1.5 rounded-lg bg-emerald-950/70 px-2.5 py-1 font-mono text-sm font-bold text-emerald-300 ring-1 ring-emerald-600/40">
-            💰 {human.stack}
+          <span className="flex items-center gap-1.5 rounded-lg bg-emerald-950/70 px-3 py-1 font-mono text-base font-extrabold text-emerald-300 ring-1 ring-emerald-600/40 sm:text-lg">
+            💰 ${human.stack}
             {human.stack !== setup.startingStack && (
-              <span className={human.stack > setup.startingStack ? 'text-emerald-400' : 'text-rose-400'}>
-                ({human.stack > setup.startingStack ? '+' : ''}
-                {human.stack - setup.startingStack})
+              <span className={`text-sm ${human.stack > setup.startingStack ? 'text-emerald-400' : 'text-rose-400'}`}>
+                ({human.stack > setup.startingStack ? '+' : '−'}${Math.abs(human.stack - setup.startingStack)})
               </span>
             )}
           </span>
@@ -320,7 +319,7 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
         <div className="pointer-events-none fixed inset-0 z-30 flex items-start justify-center px-4 pt-[18vh]">
           <CoinBurst />
           <div className="animate-pop relative rounded-2xl border-2 border-amber-400 bg-amber-500/95 px-8 py-4 text-center shadow-2xl shadow-amber-900/50">
-            <div className="text-3xl font-extrabold text-slate-900">🎉 You win {payouts['human']}!</div>
+            <div className="text-3xl font-extrabold text-slate-900">🎉 You win ${payouts['human']}!</div>
             {bestHands['human'] && (
               <div className="mt-0.5 text-sm font-semibold text-slate-800">with {HAND_RANK_NAMES[bestHands['human'].rank]}</div>
             )}
@@ -454,17 +453,17 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
                 <ActionButton label="Check" tone="neutral" onClick={() => humanAct('check')} />
               )}
               {validActions.types.includes('call') && (
-                <ActionButton label={`Call ${validActions.callAmount}`} tone="primary" onClick={() => humanAct('call')} />
+                <ActionButton label={`Call $${validActions.callAmount}`} tone="primary" onClick={() => humanAct('call')} />
               )}
               {validActions.types.includes('bet') && (
-                <ActionButton label={`Bet ${raiseAmount}`} tone="primary" onClick={() => humanAct('bet', raiseAmount)} />
+                <ActionButton label={`Bet $${raiseAmount}`} tone="primary" onClick={() => humanAct('bet', raiseAmount)} />
               )}
               {validActions.types.includes('raise') && (
-                <ActionButton label={`Raise to ${raiseAmount}`} tone="primary" onClick={() => humanAct('raise', raiseAmount)} />
+                <ActionButton label={`Raise to $${raiseAmount}`} tone="primary" onClick={() => humanAct('raise', raiseAmount)} />
               )}
               {(validActions.types.includes('bet') || validActions.types.includes('raise')) && (
                 <ActionButton
-                  label={`All in ${validActions.maxRaiseTo}`}
+                  label={`All in $${validActions.maxRaiseTo}`}
                   tone="danger"
                   onClick={() =>
                     humanAct(validActions.types.includes('raise') ? 'raise' : 'bet', validActions.maxRaiseTo)
@@ -482,7 +481,7 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
                   onChange={(e) => setRaiseAmount(Number(e.target.value))}
                   className="flex-1 accent-emerald-500"
                 />
-                <span className="w-16 text-right font-mono text-amber-200">{raiseAmount}</span>
+                <span className="w-16 text-right font-mono text-amber-200">${raiseAmount}</span>
                 <div className="flex gap-1">
                   <QuickBet label="½" onClick={() => setRaiseAmount(clamp(Math.round(potTotal * 0.5), validActions, currentLevel.bigBlind))} />
                   <QuickBet label="pot" onClick={() => setRaiseAmount(clamp(potTotal, validActions, currentLevel.bigBlind))} />
@@ -513,7 +512,7 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
           <div className="mb-1 font-semibold text-emerald-300">Hand result</div>
           {Object.entries(payouts).map(([id, amount]) => (
             <div key={id}>
-              <span className="font-semibold">{engine.players.find((p) => p.id === id)?.name}</span> won {amount}
+              <span className="font-semibold">{engine.players.find((p) => p.id === id)?.name}</span> won ${amount}
             </div>
           ))}
           {coachEnabled && handSummary && handSummary.length > 0 && (
@@ -784,7 +783,7 @@ function ActionButton({
   return (
     <button
       onClick={onClick}
-      className={`rounded-lg px-5 py-2 text-sm font-semibold text-white transition-colors ${tones[tone]}`}
+      className={`rounded-lg px-5 py-2.5 text-base font-semibold text-white transition-colors ${tones[tone]}`}
     >
       {label}
     </button>

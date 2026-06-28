@@ -15,9 +15,9 @@ export interface Scenario {
 // scenarios feature the recurring cast (with photos) instead of generic bots.
 const CHAR = (id: string) => CHARACTERS.find((c) => c.id === id)!;
 const POOLS: Record<string, AIProfile[]> = {
-  tight: [CHAR('eleanor'), CHAR('nadia'), CHAR('tex')],
-  looseAggressive: [CHAR('marco'), CHAR('spike'), CHAR('bruno')],
-  callingStation: [CHAR('leo'), CHAR('danny')],
+  tight: [CHAR('eleanor'), CHAR('nadia'), CHAR('tex'), CHAR('professor'), CHAR('raven'), CHAR('cypher')],
+  looseAggressive: [CHAR('marco'), CHAR('spike'), CHAR('bruno'), CHAR('ghost')],
+  callingStation: [CHAR('leo'), CHAR('danny'), CHAR('rookie')],
 };
 
 let seatCounter = 0;
