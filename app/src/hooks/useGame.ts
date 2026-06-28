@@ -64,7 +64,7 @@ const MAX_HAND_HISTORY = 20;
 // Pick a fresh, shuffled subset of the character roster each game so the table
 // feels different but every opponent is one of the recurring named personalities.
 // The human plays as this character's face (kept out of the opponent pool).
-const PLAYER_AVATAR = '/avatars/rookie.jpg';
+export const PLAYER_AVATAR = '/avatars/rookie.jpg';
 
 export function buildDefaultSeats(numPlayers: number): SeatConfig[] {
   const seats: SeatConfig[] = [{ id: 'human', name: 'You', isHuman: true, portrait: PLAYER_AVATAR }];

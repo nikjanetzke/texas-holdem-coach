@@ -1,4 +1,5 @@
 import type { GameSetup, SeatConfig } from '../hooks/useGame';
+import { PLAYER_AVATAR } from '../hooks/useGame';
 import { AI_ARCHETYPES } from '../ai/profiles';
 import type { AIProfile } from '../ai/profiles';
 import { CHARACTERS } from '../ai/characters';
@@ -30,7 +31,7 @@ function ai(profile: AIProfile, stack: number): SeatConfig {
   return { id: `ai-${seatCounter}`, name: character.shortName, isHuman: false, profile: character, stack };
 }
 function human(stack: number): SeatConfig {
-  return { id: 'human', name: 'You', isHuman: true, stack };
+  return { id: 'human', name: 'You', isHuman: true, stack, portrait: PLAYER_AVATAR };
 }
 
 function setup(seats: SeatConfig[], scheduleId: string, name: string, cardLuck?: LuckBand): GameSetup {
