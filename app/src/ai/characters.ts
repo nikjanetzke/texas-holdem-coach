@@ -4,9 +4,6 @@ import type { AIProfile } from './profiles';
 // (play-style stats + flavor lines) paired with a portrait photo served from
 // /avatars/<id>.jpg. If a portrait file is missing, the table falls back to a
 // procedurally-drawn face, so the app works before the images are committed.
-//
-// To add the photos: drop the nine JPGs into app/public/avatars/ using the
-// exact filenames in `portrait` below (256x256-ish, square, head centered).
 export const CHARACTERS: AIProfile[] = [
   {
     id: 'marco',
@@ -18,11 +15,12 @@ export const CHARACTERS: AIProfile[] = [
     bluffFrequency: 0.4,
     callingFrequency: 0.55,
     catchphrases: {
-      bet: ['Let me raise the stakes.', 'Money talks.'],
-      raise: ['I smell weakness.'],
-      'all-in': ["Everything. Why not?"],
-      fold: ['Take it, kid.'],
-      call: ["I'll pay to see it."],
+      bet: ['Let me raise the stakes.', 'Money talks.', "Let's make it expensive.", 'A little something for the pot.', 'Care to dance?'],
+      raise: ['I smell weakness.', 'Pump it up.', "You're not ready for this.", 'More.', 'I run this table.'],
+      'all-in': ['Everything. Why not?', 'All of it, kid.', 'Put your soul in the middle.', 'No half measures.', 'Shove.'],
+      fold: ['Take it, kid.', 'Cheap enough.', 'Not worth my cigar ash.', "I'll get it back.", 'Have this one.'],
+      call: ["I'll pay to see it.", 'Curiosity calls.', "Let's look.", "I'm in no hurry.", 'Show me something.'],
+      check: ['Free look, lovely.', 'Tap tap.', "I'll wait.", 'Your move.'],
     },
   },
   {
@@ -35,10 +33,12 @@ export const CHARACTERS: AIProfile[] = [
     bluffFrequency: 0.05,
     callingFrequency: 0.3,
     catchphrases: {
-      fold: ['Patience, dear.', 'Not this time.'],
-      bet: ['I rather like this one.'],
-      raise: ["Let's make it interesting."],
-      call: ["I'll have a look."],
+      fold: ['Patience, dear.', 'Not this time.', "I've folded better.", 'Some other hand.', 'No need to rush.'],
+      bet: ['I rather like this one.', 'A measured bet.', 'This warrants a wager.', 'Shall we?', 'Just so.'],
+      raise: ["Let's make it interesting.", 'A gentle raise.', "I'll apply a little pressure.", 'Up we go, darling.', 'Mind the gap.'],
+      call: ["I'll have a look.", 'A fair price.', 'Very well, I call.', "I'm intrigued.", "Let's continue."],
+      check: ['Check, thank you.', "I'll see a card.", 'No charge today.', 'A quiet street.'],
+      'all-in': ["I don't do this lightly.", 'All in, then.', 'Everything, dear.', 'I am quite certain.'],
     },
   },
   {
@@ -51,10 +51,12 @@ export const CHARACTERS: AIProfile[] = [
     bluffFrequency: 0.2,
     callingFrequency: 0.35,
     catchphrases: {
-      raise: ['The math favors me.'],
-      bet: ['Calculated.'],
-      fold: ['Negative expectation.'],
-      'all-in': ["I've already run the numbers."],
+      raise: ['The math favors me.', 'Expected value: positive.', 'Raising for value.', 'The numbers say push.', 'Correct play.'],
+      bet: ['Calculated.', 'A value bet.', 'This prints money.', 'By the book.', 'Optimal.'],
+      fold: ['Negative expectation.', 'Folding is correct.', 'Not enough equity.', 'The math says no.', 'Easy fold.'],
+      'all-in': ["I've already run the numbers.", 'Maximum value.', 'All in is correct here.', 'No deviation.'],
+      call: ['Pot odds justify it.', 'A profitable call.', 'The price is right.', "I'll continue."],
+      check: ['Checking back.', 'Pot control.', 'No bet warranted.', 'Free card.'],
     },
   },
   {
@@ -67,10 +69,12 @@ export const CHARACTERS: AIProfile[] = [
     bluffFrequency: 0.05,
     callingFrequency: 0.85,
     catchphrases: {
-      call: ['Sure, why not!', 'I wanna see it!'],
-      check: ['Free card, nice.'],
-      bet: ['Feeling lucky!'],
-      fold: ['Aw, fine.'],
+      call: ['Sure, why not!', 'I wanna see it!', 'Eh, I call!', "Can't fold now!", 'One more card!'],
+      check: ['Free card, nice.', 'Check it!', "I'll hang around.", 'Cool cool.'],
+      bet: ['Feeling lucky!', 'Why not a bet?', 'Throwing some in!', "Let's gooo!"],
+      fold: ['Aw, fine.', 'Okay okay.', "You got it.", 'Boo.', 'Maybe next one!'],
+      raise: ['Big one!', "Let's spice it up!", 'Yeehaw!', 'Send a few more!'],
+      'all-in': ['ALL IN BABY!', 'Why not everything?!', "Let's gamble!", 'YOLO!'],
     },
   },
   {
@@ -83,10 +87,12 @@ export const CHARACTERS: AIProfile[] = [
     bluffFrequency: 0.5,
     callingFrequency: 0.6,
     catchphrases: {
-      raise: ['Chaos!', "Let's break it!"],
-      'all-in': ['SEND IT!'],
-      bet: ['Boom.'],
-      fold: ['Whatever.'],
+      raise: ['Chaos!', "Let's break it!", 'Smash it!', 'RAISE. Deal with it.', 'More carnage!'],
+      'all-in': ['SEND IT!', 'EVERYTHING!', 'Blow it up!', 'No fear!', 'Maximum damage!'],
+      bet: ['Boom.', 'Take that.', 'Bet, obviously.', 'Pressure!'],
+      fold: ['Whatever.', 'Pfft.', 'Boring.', 'Tch, fine.'],
+      call: ['Sure, scrap.', "I'll bite.", 'Bring it.', 'Whatever, call.'],
+      check: ['Tch.', 'Free? Fine.', 'Check, lame.'],
     },
   },
   {
@@ -99,11 +105,12 @@ export const CHARACTERS: AIProfile[] = [
     bluffFrequency: 0.3,
     callingFrequency: 0.65,
     catchphrases: {
-      raise: ['You sure about that?'],
-      bet: ['Pay up.'],
-      'all-in': ["Don't test me."],
-      fold: ['Tch.'],
-      call: ["I'm watching you."],
+      raise: ['You sure about that?', 'Step up.', "Don't like it? Leave.", 'Raise. Problem?', 'Feel that.'],
+      bet: ['Pay up.', 'Cough it up.', 'Mine now.', 'Bet. Move.'],
+      'all-in': ["Don't test me.", 'All of it. Scared?', 'Push and find out.', 'Everything.'],
+      fold: ['Tch.', 'Take it.', 'Not today.', 'Hmph.'],
+      call: ["I'm watching you.", 'I call. Sweat.', "You're bluffing.", "I'll stay."],
+      check: ['Go on.', 'Check.', "I'm waiting.", 'Hmph, check.'],
     },
   },
   {
@@ -116,10 +123,12 @@ export const CHARACTERS: AIProfile[] = [
     bluffFrequency: 0.2,
     callingFrequency: 0.5,
     catchphrases: {
-      bet: ['Solid spot for a bet.'],
-      raise: ['I think I have the best of it.'],
-      call: ['Good price, I call.'],
-      fold: ['Nice hand, you win.'],
+      bet: ['Solid spot for a bet.', 'I think I lead here.', 'Value bet.', 'Looks good to me.', "Let's build it."],
+      raise: ['I think I have the best of it.', 'Raising for value.', 'Worth a raise.', 'I like my spot.'],
+      call: ['Good price, I call.', 'Fair enough.', "I'll come along.", 'Decent odds.', 'Sure, call.'],
+      fold: ['Nice hand, you win.', 'No good for me.', "I'll let it go.", 'Well played.', 'Fold it is.'],
+      check: ['Check here.', "I'll take a free one.", 'Keeping it small.', 'Check back.'],
+      'all-in': ["I'm confident here.", 'All in, good luck.', "Let's get it in.", 'I commit.'],
     },
   },
   {
@@ -132,10 +141,12 @@ export const CHARACTERS: AIProfile[] = [
     bluffFrequency: 0.15,
     callingFrequency: 0.4,
     catchphrases: {
-      fold: ["Been around too long for that."],
-      call: ['I reckon I will.'],
-      bet: ['Got a feelin about this one.'],
-      raise: ["Let's see what you're made of."],
+      fold: ['Been around too long for that.', 'Reckon not.', 'I fold, partner.', 'That dog won’t hunt.', 'Nope.'],
+      call: ['I reckon I will.', 'Call ya.', "I'll tag along.", 'Fair enough, partner.', 'Let’s mosey.'],
+      bet: ['Got a feelin’ about this one.', 'Bet, partner.', 'A modest wager.', 'Reckon I’m ahead.'],
+      raise: ["Let's see what you're made of.", 'Bump it, partner.', 'Reckon I’ll raise.', 'Time to pay the toll.'],
+      check: ['Check, partner.', "I'll wait a spell.", 'No bet from me.', 'Free card’ll do.'],
+      'all-in': ['Whole kit and caboodle.', 'All in, partner.', "I'm committed.", 'Push ’em in.'],
     },
   },
   {
@@ -148,10 +159,12 @@ export const CHARACTERS: AIProfile[] = [
     bluffFrequency: 0.05,
     callingFrequency: 0.3,
     catchphrases: {
-      fold: ['No.'],
-      bet: ['This is strong.'],
-      raise: ["I don't bluff."],
-      'all-in': ['I have it.'],
+      fold: ['No.', 'Pass.', 'Not interested.', 'Hardly.', 'Trash.'],
+      bet: ['This is strong.', 'I bet.', 'Value.', 'Pay me.'],
+      raise: ["I don't bluff.", 'Raise.', 'I have it.', 'Believe me or pay.'],
+      'all-in': ['I have it.', 'All in. I never bluff.', 'Everything.', 'Call and lose.'],
+      call: ['I call.', "I'm ahead.", 'Fine.', "You'll regret that."],
+      check: ['Check.', 'Go.', 'Nothing yet.'],
     },
   },
   {
@@ -164,10 +177,12 @@ export const CHARACTERS: AIProfile[] = [
     bluffFrequency: 0.22,
     callingFrequency: 0.35,
     catchphrases: {
-      raise: ['Optimal line.'],
-      bet: ['Probability favors this.'],
-      fold: ['Outside my range.'],
-      'all-in': ['Computed. All in.'],
+      raise: ['Optimal line.', 'Recalculating... raise.', 'Solver-approved.', 'Maximizing EV.', 'Exploit detected.'],
+      bet: ['Probability favors this.', 'Executing value bet.', 'Range advantage: mine.', 'Bet sized precisely.'],
+      fold: ['Outside my range.', 'EV negative. Fold.', 'Suboptimal. Pass.', 'Discarding.', 'Does not compute.'],
+      'all-in': ['Computed. All in.', 'Stack committed.', 'Confidence: high.', 'Maximum pressure applied.'],
+      call: ['Within tolerance. Call.', 'Pot odds acceptable.', 'Continuing.', 'Logged. Call.'],
+      check: ['Checking. Gathering data.', 'No action required.', 'Pot control engaged.'],
     },
   },
   {
@@ -180,10 +195,12 @@ export const CHARACTERS: AIProfile[] = [
     bluffFrequency: 0.45,
     callingFrequency: 0.5,
     catchphrases: {
-      raise: ['You never saw it coming.'],
-      bet: ['Read me if you can.'],
-      'all-in': ['Boo.'],
-      fold: ['...'],
+      raise: ['You never saw it coming.', 'Boo.', 'Guess.', 'Now you see me.', 'Spooky, right?'],
+      bet: ['Read me if you can.', 'Maybe I have it.', 'Or maybe not.', 'Tick tock.'],
+      'all-in': ['Boo.', 'Everything. Or nothing.', 'Dare you.', 'Fade me.'],
+      fold: ['...', 'Vanish.', 'Gone.', 'Not here.'],
+      call: ['I see you.', "I'm still here.", 'Lurking.', 'Call.'],
+      check: ['...', 'Quiet.', 'Watching.'],
     },
   },
   {
@@ -196,10 +213,12 @@ export const CHARACTERS: AIProfile[] = [
     bluffFrequency: 0.04,
     callingFrequency: 0.3,
     catchphrases: {
-      fold: ['Statistically unwise.'],
-      call: ['A reasonable price.'],
-      bet: ['The odds are with me.'],
-      raise: ['Allow me to demonstrate.'],
+      fold: ['Statistically unwise.', 'A textbook fold.', 'The literature agrees: fold.', 'Elementary discard.', 'No, no, no.'],
+      call: ['A reasonable price.', 'The odds permit it.', 'I shall call.', 'Acceptable, hypothetically.'],
+      bet: ['The odds are with me.', 'Allow me to wager.', 'A sound investment.', 'Per my calculations, bet.'],
+      raise: ['Allow me to demonstrate.', 'A pedagogical raise.', 'Observe.', 'Class is in session.'],
+      check: ['I shall check.', 'A prudent pause.', 'Let us see more data.', 'Check, for now.'],
+      'all-in': ['My thesis is sound.', 'All in, Q.E.D.', 'I stake my reputation.', 'Conclusively, all in.'],
     },
   },
   {
@@ -212,10 +231,12 @@ export const CHARACTERS: AIProfile[] = [
     bluffFrequency: 0.2,
     callingFrequency: 0.32,
     catchphrases: {
-      raise: ['Your move.'],
-      bet: ["Let's apply pressure."],
-      fold: ['Not worth it.'],
-      'all-in': ['I dare you.'],
+      raise: ['Your move.', 'Escalating.', "Let's negotiate.", 'I raise. Counter?', 'Leverage.'],
+      bet: ["Let's apply pressure.", 'A firm bet.', 'Closing the deal.', 'Bet. Your call.'],
+      fold: ['Not worth it.', 'Pass.', 'No deal.', 'Declined.', 'Beneath me.'],
+      'all-in': ['I dare you.', 'All in. Decide.', 'Everything on the table.', 'Match me.'],
+      call: ['I call your bluff.', 'Noted. Call.', "I'll see it.", 'Continuing.'],
+      check: ['Check.', 'The floor is yours.', 'For now.'],
     },
   },
   {
@@ -228,10 +249,12 @@ export const CHARACTERS: AIProfile[] = [
     bluffFrequency: 0.08,
     callingFrequency: 0.8,
     catchphrases: {
-      call: ['Is this good? I call.'],
-      check: ['Uh, check?'],
-      bet: ['Beginner’s luck!'],
-      fold: ['Probably should fold that.'],
+      call: ['Is this good? I call.', 'Um, call?', "I'll stay in I guess.", 'Sure, call!', 'Why not!'],
+      check: ['Uh, check?', 'Can I check? Check.', 'Is checking okay?', 'Check, I think.'],
+      bet: ["Beginner's luck!", "Is this a good bet?", 'I’ll bet... maybe.', 'Here goes nothing!'],
+      fold: ['Probably should fold that.', 'Too rich for me!', "I'll fold, sorry.", 'Nope nope nope.'],
+      raise: ['Can I raise? Raise!', 'Going big, eep!', 'Is this too much?', 'Raising... I think!'],
+      'all-in': ['All in?! Okay!', 'Wait, is this all my chips?', 'Here goes everything!', 'Gulp. All in.'],
     },
   },
 ];

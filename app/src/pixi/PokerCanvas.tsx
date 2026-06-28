@@ -81,10 +81,6 @@ function easeOutCubic(t: number): number {
   return 1 - Math.pow(1 - t, 3);
 }
 
-function clampN(v: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, v));
-}
-
 // Shrink seat boxes as the table fills up so 7–10 players don't overlap.
 // (~10% smaller across the board than the first pass, for extra breathing room.)
 function seatScaleFor(total: number): number {
@@ -282,17 +278,6 @@ export function PokerCanvas({ seats, communityCards, potTotal, handNumber, winne
     const seatScale = seatScaleFor(total);
     seats.forEach((seat, idx) => {
       const pos = seatPosition(idx, total, LOGICAL_W, LOGICAL_H);
-      // Each player's own chip pile, sized to their stack, sits just inside their
-      // seat (toward the centre) so you can read everyone's relative stack.
-      // Clamped to stay on-canvas (top/bottom seats were getting clipped).
-      if (seat.player.stack > 0) {
-        const ox = clampN(pos.x + (LOGICAL_W / 2 - pos.x) * 0.18, 40, LOGICAL_W - 40);
-        const oy = clampN(pos.y + (LOGICAL_H / 2 - pos.y) * 0.18, 36, LOGICAL_H - 30);
-        const pile = drawChipStack(seat.player.stack);
-        pile.scale.set(seatScale);
-        pile.position.set(ox, oy);
-        scene.addChild(pile);
-      }
       // Folded players' cards are tossed onto the felt in front of them and stay
       // there (face-down) for the rest of the hand, instead of sitting in the box.
       if (seat.player.folded) {
@@ -322,8 +307,11 @@ export function PokerCanvas({ seats, communityCards, potTotal, handNumber, winne
     const c = new Container();
     c.position.set(x, y);
     const { player, isDealer, isSmallBlind, isBigBlind, isActing, isWinner, showCards, handLabel } = seat;
-    // Scale down for crowded tables; the active player's seat grows a bit on top.
-    c.scale.set(isActing ? seatScale * 1.12 : seatScale);
+    const isHuman = player.id === 'human';
+    // Crowded tables shrink every seat. On their turn, the HUMAN's whole seat
+    // grows (we read our own cards); for opponents only their portrait grows.
+    c.scale.set(isActing && isHuman ? seatScale * 1.12 : seatScale);
+    if (player.folded) c.alpha = 0.5;
 
     const boxW = SEAT_BOX_W;
     const boxH = SEAT_BOX_H;
@@ -340,20 +328,25 @@ export function PokerCanvas({ seats, communityCards, potTotal, handNumber, winne
       }
     }
 
+    // Mostly-transparent panel so chips and felt show through; only a border for
+    // the active/winning seat plus a faint backing strip behind the text.
     const panel = new Graphics();
     const borderColor = isWinner ? theme.WINNER_GOLD : isActing ? theme.ACTING_RING : theme.SEAT_BORDER;
-    const borderWidth = isWinner || isActing ? 2.5 : 1;
-    panel.roundRect(-boxW / 2, -boxH / 2, boxW, boxH, 10).fill({ color: theme.SEAT_BG, alpha: 0.85 }).stroke({ width: borderWidth, color: borderColor });
-    if (player.folded) panel.alpha = 0.45;
+    panel.roundRect(-boxW / 2, -boxH / 2, boxW, boxH, 10).fill({ color: theme.SEAT_BG, alpha: 0.22 });
+    if (isWinner || isActing) panel.stroke({ width: 2.5, color: borderColor });
     c.addChild(panel);
 
-    const avatarRadius = 30;
-    const avatar = drawAvatar(seat, avatarRadius, isActing ? theme.ACTING_RING : 0x475569);
-    avatar.position.set(-boxW / 2 + 8 + avatarRadius, -boxH / 2 + 8 + avatarRadius);
+    const baseR = 30;
+    const avatarCenterX = -boxW / 2 + 8 + baseR;
+    const avatarCenterY = -boxH / 2 + 8 + baseR;
+    // Opponent's portrait swells on their turn (their cards stay put).
+    const drawR = isActing && !isHuman ? baseR * 1.45 : baseR;
+    const avatar = drawAvatar(seat, drawR, isActing ? theme.ACTING_RING : 0x475569);
+    avatar.position.set(avatarCenterX, avatarCenterY);
     c.addChild(avatar);
 
     // Name and stack stack vertically to the right of the (now larger) avatar.
-    const textX = -boxW / 2 + 8 + avatarRadius * 2 + 8;
+    const textX = -boxW / 2 + 8 + baseR * 2 + 8;
     const nameStyle = new TextStyle({ fontFamily: 'system-ui, sans-serif', fontSize: 18, fontWeight: 'bold', fill: 0xe5e7eb });
     const nameText = new Text({ text: truncateName(player.name, 10), style: nameStyle });
     nameText.anchor.set(0, 0.5);
@@ -368,26 +361,32 @@ export function PokerCanvas({ seats, communityCards, potTotal, handNumber, winne
     stackText.position.set(textX, -boxH / 2 + 46);
     c.addChild(stackText);
 
-    // Hole cards, centered along the bottom of the box. Folded players have no
-    // cards here — they've been tossed onto the felt in front of them.
+    // Hole cards along the bottom. The human's are full size and side-by-side so
+    // they're readable; opponents' are 30% smaller and overlapping (we only ever
+    // see their backs) to free up table space.
     if (!player.folded) {
       const cardsContainer = new Container();
-      const gap = CARD_W_SM + 6;
-      const cardY = SEAT_CARD_TOP;
-      if (player.holeCards.length === 0) {
-        const back1 = drawCardBack(CARD_W_SM, CARD_H_SM);
-        const back2 = drawCardBack(CARD_W_SM, CARD_H_SM);
-        back1.position.set(-gap / 2 - CARD_W_SM / 2, cardY);
-        back2.position.set(gap / 2 - CARD_W_SM / 2, cardY);
-        cardsContainer.addChild(back1, back2);
-      } else {
-        player.holeCards.forEach((card, i) => {
-          const node = showCards ? drawCardFace(card, CARD_W_SM, CARD_H_SM) : drawCardBack(CARD_W_SM, CARD_H_SM);
-          node.position.set((i === 0 ? -gap / 2 : gap / 2) - CARD_W_SM / 2, cardY);
-          cardsContainer.addChild(node);
-        });
+      const cw = isHuman ? CARD_W_SM : CARD_W_SM * 0.7;
+      const ch = isHuman ? CARD_H_SM : CARD_H_SM * 0.7;
+      const gap = isHuman ? cw + 6 : cw * 0.5; // overlap for opponents
+      const cardY = boxH / 2 - ch - 8;
+      const showFaces = isHuman || showCards;
+      for (let i = 0; i < 2; i++) {
+        const card = player.holeCards[i];
+        const node = showFaces && card ? drawCardFace(card, cw, ch) : drawCardBack(cw, ch);
+        node.position.set((i === 0 ? -gap / 2 : gap / 2) - cw / 2, cardY);
+        cardsContainer.addChild(node);
       }
       c.addChild(cardsContainer);
+    }
+
+    // The player's own chip pile (sized to their stack), tucked into the lower-right
+    // of the seat where the cards never reach — chips are never drawn over cards.
+    if (player.stack > 0) {
+      const pile = drawChipStack(player.stack);
+      pile.scale.set(0.55);
+      pile.position.set(boxW / 2 - 12, boxH / 2 - 14);
+      c.addChild(pile);
     }
 
     // Badges
