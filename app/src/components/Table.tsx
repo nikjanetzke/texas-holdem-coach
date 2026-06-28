@@ -364,7 +364,7 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
           <CoinBurst />
           {!winGifFailed && (
             <img
-              src="/assets/win.gif"
+              src="/assets/poker-animation.gif"
               alt=""
               onError={() => setWinGifFailed(true)}
               className="animate-pop relative mb-4 w-72 max-w-[80vw] rounded-2xl shadow-2xl shadow-black/50"
