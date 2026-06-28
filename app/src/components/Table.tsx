@@ -56,6 +56,7 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
   const [showMenu, setShowMenu] = useState(false);
   const [paused, setPaused] = useState(false);
   const [speechOn, setSpeechOn] = useState(false);
+  const [winGifFailed, setWinGifFailed] = useState(false);
   const prevSecLeftRef = useRef<number | null>(null);
   const spokenTurnRef = useRef<number>(-1);
   const feltObserverRef = useRef<ResizeObserver | null>(null);
@@ -357,10 +358,18 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
         </div>
       </div>
 
-      {/* Win celebration — coin burst + banner when you take down the pot. */}
+      {/* Win celebration — win gif (if present) + coin burst + banner. */}
       {isHandOver && payouts['human'] > 0 && (
-        <div className="pointer-events-none fixed inset-0 z-30 flex items-start justify-center px-4 pt-[18vh]">
+        <div className="pointer-events-none fixed inset-0 z-30 flex flex-col items-center justify-start px-4 pt-[12vh]">
           <CoinBurst />
+          {!winGifFailed && (
+            <img
+              src="/assets/win.gif"
+              alt=""
+              onError={() => setWinGifFailed(true)}
+              className="animate-pop relative mb-4 w-72 max-w-[80vw] rounded-2xl shadow-2xl shadow-black/50"
+            />
+          )}
           <div className="animate-pop relative rounded-2xl border-2 border-amber-400 bg-amber-500/95 px-8 py-4 text-center shadow-2xl shadow-amber-900/50">
             <div className="text-3xl font-extrabold text-slate-900">🎉 You win ${payouts['human'].toLocaleString()}!</div>
             {bestHands['human'] && (
