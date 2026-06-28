@@ -18,6 +18,7 @@ export interface SeatConfig {
   name: string;
   isHuman: boolean;
   profile?: AIProfile;
+  portrait?: string; // avatar image; for the human seat (AI seats use profile.portrait)
   stack?: number; // overrides startingStack for this seat (scenarios)
 }
 
@@ -62,9 +63,12 @@ const MAX_HAND_HISTORY = 20;
 
 // Pick a fresh, shuffled subset of the character roster each game so the table
 // feels different but every opponent is one of the recurring named personalities.
+// The human plays as this character's face (kept out of the opponent pool).
+const PLAYER_AVATAR = '/avatars/rookie.jpg';
+
 export function buildDefaultSeats(numPlayers: number): SeatConfig[] {
-  const seats: SeatConfig[] = [{ id: 'human', name: 'You', isHuman: true }];
-  const roster = [...CHARACTERS].sort(() => Math.random() - 0.5);
+  const seats: SeatConfig[] = [{ id: 'human', name: 'You', isHuman: true, portrait: PLAYER_AVATAR }];
+  const roster = CHARACTERS.filter((c) => c.portrait !== PLAYER_AVATAR).sort(() => Math.random() - 0.5);
   for (let i = 1; i < numPlayers; i++) {
     const profile = roster[(i - 1) % roster.length];
     seats.push({ id: profile.id, name: profile.shortName, isHuman: false, profile });

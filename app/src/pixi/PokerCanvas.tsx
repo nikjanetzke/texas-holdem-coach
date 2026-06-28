@@ -257,7 +257,7 @@ export function PokerCanvas({ seats, communityCards, potTotal, handNumber, winne
     // Pot badge
     const potG = new Graphics();
     const potLabel = new Text({
-      text: `Pot: $${potTotal}`,
+      text: `Pot: $${potTotal.toLocaleString()}`,
       style: new TextStyle({ fontFamily: 'system-ui, sans-serif', fontSize: 14, fontWeight: 'bold', fill: theme.GOLD_BRIGHT }),
     });
     potLabel.anchor.set(0.5);
@@ -349,7 +349,7 @@ export function PokerCanvas({ seats, communityCards, potTotal, handNumber, winne
     c.addChild(nameText);
 
     const stackStyle = new TextStyle({ fontFamily: 'monospace', fontSize: 17, fontWeight: 'bold', fill: 0x6ee7b7 });
-    const stackText = new Text({ text: `$${player.stack}`, style: stackStyle });
+    const stackText = new Text({ text: `$${player.stack.toLocaleString()}`, style: stackStyle });
     stackText.anchor.set(0, 0.5);
     stackText.position.set(textX, -boxH / 2 + 46);
     c.addChild(stackText);

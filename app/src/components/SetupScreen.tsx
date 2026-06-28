@@ -11,7 +11,7 @@ export function SetupScreen({ onStart }: { onStart: (setup: GameSetup) => void }
   // Kept as strings so the fields can be cleared while typing (a numeric state
   // floored at the min would otherwise pin them at "0" and refuse to empty).
   const [numPlayers, setNumPlayers] = useState('6');
-  const [startingStack, setStartingStack] = useState('1000');
+  const [startingStack, setStartingStack] = useState('10000');
   const [scheduleId, setScheduleId] = useState(DEFAULT_SCHEDULE_ID);
   const [actionTimerSeconds, setActionTimerSeconds] = useState<number | null>(null);
 
@@ -38,7 +38,7 @@ export function SetupScreen({ onStart }: { onStart: (setup: GameSetup) => void }
                 document.documentElement.requestFullscreen?.().catch(() => {});
                 setEntered(true);
               }}
-              className="absolute bottom-4 left-1/2 -translate-x-1/2 rounded-xl bg-emerald-600 px-12 py-3 text-lg font-bold text-white shadow-lg shadow-black/50 ring-2 ring-emerald-300/50 transition-colors hover:bg-emerald-500"
+              className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-lg bg-emerald-600/45 px-6 py-1.5 text-sm font-semibold text-white shadow-md ring-1 ring-white/40 backdrop-blur-sm transition-colors hover:bg-emerald-500/80"
             >
               ▶ Start
             </button>

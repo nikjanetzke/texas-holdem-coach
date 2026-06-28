@@ -81,7 +81,7 @@ export function drawChipStack(amount: number): Container {
     fill: theme.GOLD_BRIGHT,
     stroke: { color: 0x000000, width: 3 },
   });
-  const label = new Text({ text: `$${amount}`, style: labelStyle });
+  const label = new Text({ text: `$${amount.toLocaleString()}`, style: labelStyle });
   label.anchor.set(0.5, 1);
   label.position.set(0, -chips.length * 4 - 12);
   c.addChild(label);

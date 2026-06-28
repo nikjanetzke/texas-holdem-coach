@@ -272,11 +272,9 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
           <span className="flex items-center gap-1.5 rounded-lg bg-emerald-950/70 px-3 py-1 font-mono text-base font-extrabold text-emerald-300 ring-1 ring-emerald-600/40 sm:text-lg">
-            💰 ${human.stack}
-            {human.stack !== setup.startingStack && (
-              <span className={`text-sm ${human.stack > setup.startingStack ? 'text-emerald-400' : 'text-rose-400'}`}>
-                ({human.stack > setup.startingStack ? '+' : '−'}${Math.abs(human.stack - setup.startingStack)})
-              </span>
+            💰 ${human.stack.toLocaleString()}
+            {human.stack > setup.startingStack && (
+              <span className="text-sm text-emerald-400">(+${(human.stack - setup.startingStack).toLocaleString()})</span>
             )}
           </span>
           <button
@@ -319,7 +317,7 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
         <div className="pointer-events-none fixed inset-0 z-30 flex items-start justify-center px-4 pt-[18vh]">
           <CoinBurst />
           <div className="animate-pop relative rounded-2xl border-2 border-amber-400 bg-amber-500/95 px-8 py-4 text-center shadow-2xl shadow-amber-900/50">
-            <div className="text-3xl font-extrabold text-slate-900">🎉 You win ${payouts['human']}!</div>
+            <div className="text-3xl font-extrabold text-slate-900">🎉 You win ${payouts['human'].toLocaleString()}!</div>
             {bestHands['human'] && (
               <div className="mt-0.5 text-sm font-semibold text-slate-800">with {HAND_RANK_NAMES[bestHands['human'].rank]}</div>
             )}
@@ -353,7 +351,10 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
               showCards,
               handLabel,
               speech: speechByPlayer[p.id],
-              portrait: setup.seats.find((s) => s.id === p.id)?.profile?.portrait,
+              portrait: (() => {
+                const cfg = setup.seats.find((s) => s.id === p.id);
+                return cfg?.profile?.portrait ?? cfg?.portrait;
+              })(),
             };
           })}
         />
@@ -423,16 +424,34 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
 
       {/* Action bar — order-first keeps it directly under the table so the coach
           panel can never push the buttons below the fold. */}
-      {validActions && (
-        <div className="animate-fade-up order-first mt-2 rounded-xl border border-emerald-600/50 bg-slate-900/90 p-3 ring-1 ring-emerald-500/30">
+      {!isHandOver && !human.folded && (
+        <div
+          className={`animate-fade-up order-first mt-2 rounded-xl border bg-slate-900/90 p-3 ${
+            validActions ? 'border-emerald-600/50 ring-1 ring-emerald-500/30' : 'border-slate-700'
+          }`}
+        >
           <div className="mb-2 flex items-center justify-between">
-            <span className="text-sm font-bold text-emerald-300">● Your turn</span>
-            {actionSecondsLeft != null && (
+            <span className={`text-sm font-bold ${validActions ? 'text-emerald-300' : 'text-slate-400'}`}>
+              {validActions ? '● Your turn' : '○ Waiting for other players…'}
+            </span>
+            {validActions && actionSecondsLeft != null && (
               <span className={`font-mono text-sm font-bold ${actionSecondsLeft <= 5 ? 'text-rose-400' : 'text-slate-300'}`}>
                 {actionSecondsLeft}s
               </span>
             )}
           </div>
+          {!validActions ? (
+            // Buttons stay visible (greyed) when it isn't your turn, so the layout
+            // never jumps and you can see what's coming.
+            <div className="flex flex-wrap gap-1.5">
+              <ActionButton label="Fold" tone="danger" disabled onClick={() => {}} />
+              <ActionButton label="Check" tone="neutral" disabled onClick={() => {}} />
+              <ActionButton label="Call" tone="primary" disabled onClick={() => {}} />
+              <ActionButton label="Raise" tone="primary" disabled onClick={() => {}} />
+              <ActionButton label="All in" tone="danger" disabled onClick={() => {}} />
+            </div>
+          ) : (
+          <>
           {actionSecondsLeft != null && (
             <div className="mb-3 h-1.5 w-full overflow-hidden rounded-full bg-slate-800">
               <div
@@ -459,7 +478,7 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
                 onChange={(e) => setRaiseAmount(Number(e.target.value))}
                 className="h-1.5 flex-1 accent-emerald-500"
               />
-              <span className="w-16 shrink-0 text-right font-mono text-sm font-bold text-amber-200">${raiseAmount}</span>
+              <span className="w-20 shrink-0 text-right font-mono text-sm font-bold text-amber-200">${raiseAmount.toLocaleString()}</span>
             </div>
           )}
           {/* Action buttons in one tight row. */}
@@ -471,13 +490,13 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
               <ActionButton label="Check" tone="neutral" onClick={() => humanAct('check')} />
             )}
             {validActions.types.includes('call') && (
-              <ActionButton label={`Call $${validActions.callAmount}`} tone="primary" onClick={() => humanAct('call')} />
+              <ActionButton label={`Call $${validActions.callAmount.toLocaleString()}`} tone="primary" onClick={() => humanAct('call')} />
             )}
             {validActions.types.includes('bet') && (
-              <ActionButton label={`Bet $${raiseAmount}`} tone="primary" onClick={() => humanAct('bet', raiseAmount)} />
+              <ActionButton label={`Bet $${raiseAmount.toLocaleString()}`} tone="primary" onClick={() => humanAct('bet', raiseAmount)} />
             )}
             {validActions.types.includes('raise') && (
-              <ActionButton label={`Raise $${raiseAmount}`} tone="primary" onClick={() => humanAct('raise', raiseAmount)} />
+              <ActionButton label={`Raise $${raiseAmount.toLocaleString()}`} tone="primary" onClick={() => humanAct('raise', raiseAmount)} />
             )}
             {(validActions.types.includes('bet') || validActions.types.includes('raise')) && (
               <ActionButton
@@ -487,6 +506,8 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
               />
             )}
           </div>
+          </>
+          )}
         </div>
       )}
 
@@ -509,7 +530,7 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
           <div className="mb-1 font-semibold text-emerald-300">Hand result</div>
           {Object.entries(payouts).map(([id, amount]) => (
             <div key={id}>
-              <span className="font-semibold">{engine.players.find((p) => p.id === id)?.name}</span> won ${amount}
+              <span className="font-semibold">{engine.players.find((p) => p.id === id)?.name}</span> won ${amount.toLocaleString()}
             </div>
           ))}
           {coachEnabled && handSummary && handSummary.length > 0 && (
@@ -767,10 +788,12 @@ function ActionButton({
   label,
   onClick,
   tone,
+  disabled,
 }: {
   label: string;
   onClick: () => void;
   tone: 'primary' | 'danger' | 'neutral';
+  disabled?: boolean;
 }) {
   const tones = {
     primary: 'bg-emerald-600 hover:bg-emerald-500',
@@ -780,7 +803,10 @@ function ActionButton({
   return (
     <button
       onClick={onClick}
-      className={`rounded-lg px-4 py-2 text-sm font-bold text-white transition-colors ${tones[tone]}`}
+      disabled={disabled}
+      className={`rounded-lg px-4 py-2 text-sm font-bold text-white transition-colors ${tones[tone]} ${
+        disabled ? 'cursor-not-allowed opacity-40 saturate-50' : ''
+      }`}
     >
       {label}
     </button>
