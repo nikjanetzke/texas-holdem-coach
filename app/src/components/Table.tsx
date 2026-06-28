@@ -140,6 +140,36 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
     if (engine.isHandOver() && !lastHandOverSignaled.current) {
       lastHandOverSignaled.current = true;
       soundManager.play('win');
+      // Reveal celebration: winner(s) say a line, and the dealer calls the hand
+      // aloud (when speech is on). Cards + hand-rank pills are already shown.
+      const sd = engine.showdownResult;
+      if (sd) {
+        const winners = Object.keys(sd.payouts);
+        const winLines = ['I win!', 'Ship it!', "Read 'em and weep!", "That's mine.", 'Gotcha!'];
+        if (winners.length > 0) {
+          const updates: Record<string, string> = {};
+          winners.forEach((id, i) => {
+            updates[id] = id === 'human' ? 'I win!' : winLines[(i + 1) % winLines.length];
+          });
+          setSpeechByPlayer((prev) => ({ ...prev, ...updates }));
+          setTimeout(() => {
+            setSpeechByPlayer((prev) => {
+              const rest = { ...prev };
+              winners.forEach((id) => {
+                if (rest[id] && winLines.includes(rest[id])) delete rest[id];
+              });
+              return rest;
+            });
+          }, 3000);
+
+          // Dealer call-out of the winning hand (TTS, no-op if speech is off).
+          const id = winners[0];
+          const name = engine.players.find((p) => p.id === id)?.name ?? 'Player';
+          const rank = sd.bestHandByPlayer?.[id]?.rank;
+          const handName = rank != null ? HAND_RANK_NAMES[rank] : '';
+          speak(`${name} wins${handName ? ` with ${handName.toLowerCase()}` : ''}.`);
+        }
+      }
     } else if (!engine.isHandOver()) {
       lastHandOverSignaled.current = false;
     }
@@ -756,12 +786,28 @@ function MathBreakdown({ math, suggested }: { math: CoachMath; suggested: Action
         <>
           <div>
             <div className="font-semibold text-slate-200">2. Pot odds — the price to call</div>
-            <p className="mt-0.5 font-mono">
-              call {math.amountToCall} ÷ (pot {math.potBeforeCall} + call {math.amountToCall}) ={' '}
+            <p className="mt-1 text-slate-400">
+              You're risking <span className="text-amber-300">{math.amountToCall}</span> to win the{' '}
+              <span className="text-slate-200">{math.potBeforeCall}</span> already in the pot. After you call, the pot
+              becomes {math.potBeforeCall} + {math.amountToCall} = {math.potBeforeCall + math.amountToCall}, and your{' '}
+              {math.amountToCall} is part of it. The share you're paying for is:
+            </p>
+            <p className="mt-1 font-mono">
+              {math.amountToCall} ÷ {math.potBeforeCall + math.amountToCall} ={' '}
               <span className="text-amber-300">{math.potOddsPercent.toFixed(1)}%</span>
             </p>
-            <p className="mt-0.5 text-slate-400">
-              You need at least {math.potOddsPercent.toFixed(1)}% equity for a call to break even.
+            <p className="mt-1 text-slate-400">
+              That's the <span className="text-slate-200">break-even point</span>: if you win more often than{' '}
+              {math.potOddsPercent.toFixed(1)}% of the time, calling makes money over the long run; less often, it loses.
+              {math.amountToCall > 0 && (
+                <>
+                  {' '}In odds terms that's about{' '}
+                  <span className="text-slate-200">
+                    {(math.potBeforeCall / math.amountToCall).toFixed(1)}-to-1
+                  </span>{' '}
+                  ({math.potBeforeCall} to win vs {math.amountToCall} to call).
+                </>
+              )}
             </p>
           </div>
           <div>
