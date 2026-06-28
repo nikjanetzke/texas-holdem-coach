@@ -443,51 +443,48 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
               />
             </div>
           )}
-          {/* Buttons on the left, bet sizing on the right (stacks on narrow screens). */}
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
-            <div className="flex flex-wrap gap-2">
-              {validActions.types.includes('fold') && (
-                <ActionButton label="Fold" tone="danger" onClick={() => humanAct('fold')} />
-              )}
-              {validActions.types.includes('check') && (
-                <ActionButton label="Check" tone="neutral" onClick={() => humanAct('check')} />
-              )}
-              {validActions.types.includes('call') && (
-                <ActionButton label={`Call $${validActions.callAmount}`} tone="primary" onClick={() => humanAct('call')} />
-              )}
-              {validActions.types.includes('bet') && (
-                <ActionButton label={`Bet $${raiseAmount}`} tone="primary" onClick={() => humanAct('bet', raiseAmount)} />
-              )}
-              {validActions.types.includes('raise') && (
-                <ActionButton label={`Raise to $${raiseAmount}`} tone="primary" onClick={() => humanAct('raise', raiseAmount)} />
-              )}
-              {(validActions.types.includes('bet') || validActions.types.includes('raise')) && (
-                <ActionButton
-                  label={`All in $${validActions.maxRaiseTo}`}
-                  tone="danger"
-                  onClick={() =>
-                    humanAct(validActions.types.includes('raise') ? 'raise' : 'bet', validActions.maxRaiseTo)
-                  }
-                />
-              )}
-            </div>
-            {(validActions.types.includes('bet') || validActions.types.includes('raise')) && (
-              <div className="flex items-center gap-3 lg:flex-1">
-                <input
-                  type="range"
-                  min={validActions.types.includes('raise') ? validActions.minRaiseTo : currentLevel.bigBlind}
-                  max={validActions.maxRaiseTo}
-                  value={raiseAmount}
-                  onChange={(e) => setRaiseAmount(Number(e.target.value))}
-                  className="flex-1 accent-emerald-500"
-                />
-                <span className="w-16 text-right font-mono text-amber-200">${raiseAmount}</span>
-                <div className="flex gap-1">
-                  <QuickBet label="½" onClick={() => setRaiseAmount(clamp(Math.round(potTotal * 0.5), validActions, currentLevel.bigBlind))} />
-                  <QuickBet label="pot" onClick={() => setRaiseAmount(clamp(potTotal, validActions, currentLevel.bigBlind))} />
-                  <QuickBet label="max" onClick={() => setRaiseAmount(validActions.maxRaiseTo)} />
-                </div>
+          {/* Compact bet sizing: quick-fraction chips + thin slider + amount, on one line. */}
+          {(validActions.types.includes('bet') || validActions.types.includes('raise')) && (
+            <div className="mb-2 flex items-center gap-2">
+              <div className="flex gap-1">
+                <QuickBet label="½" onClick={() => setRaiseAmount(clamp(Math.round(potTotal * 0.5), validActions, currentLevel.bigBlind))} />
+                <QuickBet label="pot" onClick={() => setRaiseAmount(clamp(potTotal, validActions, currentLevel.bigBlind))} />
+                <QuickBet label="max" onClick={() => setRaiseAmount(validActions.maxRaiseTo)} />
               </div>
+              <input
+                type="range"
+                min={validActions.types.includes('raise') ? validActions.minRaiseTo : currentLevel.bigBlind}
+                max={validActions.maxRaiseTo}
+                value={raiseAmount}
+                onChange={(e) => setRaiseAmount(Number(e.target.value))}
+                className="h-1.5 flex-1 accent-emerald-500"
+              />
+              <span className="w-16 shrink-0 text-right font-mono text-sm font-bold text-amber-200">${raiseAmount}</span>
+            </div>
+          )}
+          {/* Action buttons in one tight row. */}
+          <div className="flex flex-wrap gap-1.5">
+            {validActions.types.includes('fold') && (
+              <ActionButton label="Fold" tone="danger" onClick={() => humanAct('fold')} />
+            )}
+            {validActions.types.includes('check') && (
+              <ActionButton label="Check" tone="neutral" onClick={() => humanAct('check')} />
+            )}
+            {validActions.types.includes('call') && (
+              <ActionButton label={`Call $${validActions.callAmount}`} tone="primary" onClick={() => humanAct('call')} />
+            )}
+            {validActions.types.includes('bet') && (
+              <ActionButton label={`Bet $${raiseAmount}`} tone="primary" onClick={() => humanAct('bet', raiseAmount)} />
+            )}
+            {validActions.types.includes('raise') && (
+              <ActionButton label={`Raise $${raiseAmount}`} tone="primary" onClick={() => humanAct('raise', raiseAmount)} />
+            )}
+            {(validActions.types.includes('bet') || validActions.types.includes('raise')) && (
+              <ActionButton
+                label={`All in`}
+                tone="danger"
+                onClick={() => humanAct(validActions.types.includes('raise') ? 'raise' : 'bet', validActions.maxRaiseTo)}
+              />
             )}
           </div>
         </div>
@@ -783,7 +780,7 @@ function ActionButton({
   return (
     <button
       onClick={onClick}
-      className={`rounded-lg px-5 py-2.5 text-base font-semibold text-white transition-colors ${tones[tone]}`}
+      className={`rounded-lg px-4 py-2 text-sm font-bold text-white transition-colors ${tones[tone]}`}
     >
       {label}
     </button>
