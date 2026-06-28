@@ -258,7 +258,8 @@ export function PokerCanvas({ seats, communityCards, potTotal, handNumber, winne
       t.position.set(LOGICAL_W / 2, boardY);
       board.addChild(t);
     }
-    scene.addChild(board);
+    // NB: the board is added LAST (after seats) so the community cards always sit
+    // on top — folded/mucked cards tossed toward the centre never cover them.
 
     // Pot badge
     const potG = new Graphics();
@@ -301,6 +302,9 @@ export function PokerCanvas({ seats, communityCards, potTotal, handNumber, winne
         scene.addChild(chips);
       }
     });
+
+    // Community cards on top of everything else on the felt.
+    scene.addChild(board);
   }
 
   function buildSeatNode(seat: SeatViewModel, x: number, y: number, seatScale = 1): Container {
