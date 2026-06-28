@@ -58,20 +58,59 @@ export function drawCardFace(card: Card, w = CARD_W, h = CARD_H): Container {
   return c;
 }
 
+const CHIP_R = 11;
+const CHIP_RY = CHIP_R * 0.42; // squashed ellipse for a 3/4 view
+const CHIP_TH = 4.2; // visible thickness per chip in a stack
+const CHIP_PER_COL = 6; // chips before starting a new column
+
+// A single realistic poker chip (cylinder side + top face + edge spots + ring),
+// drawn so a column of them reads as a glossy clay stack rather than flat discs.
+function drawChip(c: Container, x: number, y: number, color: number, ring: number, topFace: boolean) {
+  const g = new Graphics();
+  // Cylinder side (the thickness you see under the top face).
+  g.ellipse(x, y + CHIP_TH, CHIP_R, CHIP_RY).fill(shade(color, -55));
+  g.rect(x - CHIP_R, y, CHIP_R * 2, CHIP_TH).fill(shade(color, -55));
+  // Top face + rim.
+  g.ellipse(x, y, CHIP_R, CHIP_RY).fill(color).stroke({ width: 1, color: shade(color, 35) });
+  c.addChild(g);
+
+  // Edge spots + inner ring only on the top chip of a column (keeps it crisp).
+  if (topFace) {
+    const spots = new Graphics();
+    for (let a = 0; a < 6; a++) {
+      const ang = (a / 6) * Math.PI * 2;
+      const sx = x + Math.cos(ang) * CHIP_R * 0.82;
+      const sy = y + Math.sin(ang) * CHIP_RY * 0.82;
+      spots.ellipse(sx, sy, 1.7, 1.1).fill({ color: ring, alpha: 0.95 });
+    }
+    spots.ellipse(x, y, CHIP_R * 0.5, CHIP_RY * 0.5).stroke({ width: 1, color: ring, alpha: 0.85 });
+    // Soft top highlight for gloss.
+    spots.ellipse(x - CHIP_R * 0.25, y - CHIP_RY * 0.3, CHIP_R * 0.4, CHIP_RY * 0.35).fill({ color: 0xffffff, alpha: 0.12 });
+    c.addChild(spots);
+  }
+}
+
 export function drawChipStack(amount: number): Container {
   const c = new Container();
-  const chips = theme.chipBreakdown(amount);
-  const radius = 12;
-  chips.forEach((chip, i) => {
-    const y = -i * 4;
-    const shadow = new Graphics();
-    shadow.ellipse(0, y + 2, radius, radius * 0.55).fill({ color: 0x000000, alpha: 0.15 });
-    c.addChild(shadow);
+  // Up to 20 chips so larger stacks visibly grow (≈10 tiers from tiny to huge).
+  const chips = theme.chipBreakdown(amount, 20);
+  const cols = Math.max(1, Math.ceil(chips.length / CHIP_PER_COL));
+  let tallest = 0;
 
-    const g = new Graphics();
-    g.circle(0, y - 2, radius).fill(chip.color).stroke({ width: 1.5, color: chip.ring });
-    g.circle(0, y - 2, radius - 3).stroke({ width: 1, color: chip.ring, alpha: 0.6 });
-    c.addChild(g);
+  chips.forEach((chip, idx) => {
+    const col = Math.floor(idx / CHIP_PER_COL);
+    const row = idx % CHIP_PER_COL;
+    const colHeight = Math.min(CHIP_PER_COL, chips.length - col * CHIP_PER_COL);
+    const x = (col - (cols - 1) / 2) * (CHIP_R * 1.9);
+    const y = -row * CHIP_TH;
+    const isTop = row === colHeight - 1;
+    if (row === 0) {
+      const shadow = new Graphics();
+      shadow.ellipse(x, CHIP_TH + 2, CHIP_R * 1.05, CHIP_RY * 1.1).fill({ color: 0x000000, alpha: 0.22 });
+      c.addChild(shadow);
+    }
+    drawChip(c, x, y, chip.color, chip.ring, isTop);
+    tallest = Math.max(tallest, colHeight);
   });
 
   const labelStyle = new TextStyle({
@@ -83,7 +122,7 @@ export function drawChipStack(amount: number): Container {
   });
   const label = new Text({ text: `$${amount.toLocaleString()}`, style: labelStyle });
   label.anchor.set(0.5, 1);
-  label.position.set(0, -chips.length * 4 - 12);
+  label.position.set(0, -tallest * CHIP_TH - 12);
   c.addChild(label);
 
   return c;
