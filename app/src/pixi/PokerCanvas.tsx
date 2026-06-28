@@ -38,7 +38,7 @@ function seatPosition(index: number, total: number, w: number, h: number) {
   const theta = (index / total) * 2 * Math.PI;
   // Vertical spread kept tight enough that the tall seat boxes at the top and
   // bottom of the oval stay fully on-canvas (heads no longer clipped).
-  const x = w / 2 + (w * 0.41) * Math.sin(theta);
+  const x = w / 2 + (w * 0.43) * Math.sin(theta);
   const y = h / 2 + (h * 0.345) * Math.cos(theta);
   const chipX = x + (w / 2 - x) * 0.32;
   const chipY = y + (h / 2 - y) * 0.32;
@@ -86,12 +86,13 @@ function clampN(v: number, min: number, max: number): number {
 }
 
 // Shrink seat boxes as the table fills up so 7–10 players don't overlap.
+// (~10% smaller across the board than the first pass, for extra breathing room.)
 function seatScaleFor(total: number): number {
-  if (total <= 6) return 1;
-  if (total === 7) return 0.9;
-  if (total === 8) return 0.82;
-  if (total === 9) return 0.74;
-  return 0.68; // 10
+  if (total <= 6) return 0.92;
+  if (total === 7) return 0.81;
+  if (total === 8) return 0.74;
+  if (total === 9) return 0.67;
+  return 0.61; // 10
 }
 
 export function PokerCanvas({ seats, communityCards, potTotal, handNumber, winnerIds, width = LOGICAL_W, height = LOGICAL_H }: PokerCanvasProps) {

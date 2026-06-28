@@ -53,6 +53,7 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
   const [showCardRating, setShowCardRating] = useState(false);
   const [showMath, setShowMath] = useState(false);
   const [openPanel, setOpenPanel] = useState<'history' | 'export' | null>(null);
+  const [showMenu, setShowMenu] = useState(false);
   const [paused, setPaused] = useState(false);
   const [speechOn, setSpeechOn] = useState(false);
   const prevSecLeftRef = useRef<number | null>(null);
@@ -343,6 +344,13 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
           >
             <span className="text-sm">⛶</span> Full
           </button>
+          <button
+            onClick={() => setShowMenu(true)}
+            className="rounded-full bg-slate-800 px-2 py-0.5 text-base font-semibold leading-none text-slate-300 hover:bg-slate-700"
+            title="Hand history & export"
+          >
+            ⋯
+          </button>
         </div>
       </div>
 
@@ -601,29 +609,50 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
         </div>
       )}
 
-      <div className="mt-4 space-y-2">
-        <Collapsible
-          label={`Hand history${handHistory.length ? ` (${handHistory.length})` : ''}`}
-          open={openPanel === 'history'}
-          onToggle={() => setOpenPanel((p) => (p === 'history' ? null : 'history'))}
-        >
-          <HandHistoryPanel history={handHistory} />
-        </Collapsible>
-        <Collapsible
-          label="Export & share"
-          open={openPanel === 'export'}
-          onToggle={() => setOpenPanel((p) => (p === 'export' ? null : 'export'))}
-        >
-          <ExportControls
-            setup={setup}
-            handHistory={handHistory}
-            leakTracker={leakTracker}
-            blinds={{ smallBlind: currentLevel.smallBlind, bigBlind: currentLevel.bigBlind }}
-          />
-        </Collapsible>
-      </div>
         </div>
       </div>
+
+      {/* Hand history & export live in a modal (opened from the ⋯ button) so they
+          don't take up game screen space — they're only needed for review/export. */}
+      {showMenu && (
+        <div
+          className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 p-4"
+          onClick={() => setShowMenu(false)}
+        >
+          <div
+            className="max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-xl border border-slate-700 bg-slate-900 p-4 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-lg font-bold text-slate-100">Hand history &amp; export</h2>
+              <button onClick={() => setShowMenu(false)} className="rounded px-2 py-1 text-slate-400 hover:bg-slate-800 hover:text-slate-100">
+                ✕
+              </button>
+            </div>
+            <div className="space-y-2">
+              <Collapsible
+                label={`Hand history${handHistory.length ? ` (${handHistory.length})` : ''}`}
+                open={openPanel === 'history'}
+                onToggle={() => setOpenPanel((p) => (p === 'history' ? null : 'history'))}
+              >
+                <HandHistoryPanel history={handHistory} />
+              </Collapsible>
+              <Collapsible
+                label="Export & share"
+                open={openPanel === 'export'}
+                onToggle={() => setOpenPanel((p) => (p === 'export' ? null : 'export'))}
+              >
+                <ExportControls
+                  setup={setup}
+                  handHistory={handHistory}
+                  leakTracker={leakTracker}
+                  blinds={{ smallBlind: currentLevel.smallBlind, bigBlind: currentLevel.bigBlind }}
+                />
+              </Collapsible>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
