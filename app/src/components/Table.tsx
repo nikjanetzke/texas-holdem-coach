@@ -7,6 +7,7 @@ import { HAND_RANK_NAMES } from '../engine/evaluator';
 import type { ActionType } from '../engine/betting';
 import { PokerCanvas } from '../pixi/PokerCanvas';
 import { soundManager, type SfxName } from '../sound/SoundManager';
+import { setSpeechEnabled, speak, speechSupported } from '../sound/speech';
 import { chenScore } from '../engine/preflop';
 import type { CoachMath } from '../coach/coach';
 import type { Card } from '../engine/deck';
@@ -53,7 +54,9 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
   const [showMath, setShowMath] = useState(false);
   const [openPanel, setOpenPanel] = useState<'history' | 'export' | null>(null);
   const [paused, setPaused] = useState(false);
+  const [speechOn, setSpeechOn] = useState(false);
   const prevSecLeftRef = useRef<number | null>(null);
+  const spokenTurnRef = useRef<number>(-1);
   const feltObserverRef = useRef<ResizeObserver | null>(null);
   const feltResizeRef = useRef<() => void>(() => {});
   // Remembered so the end-of-game splash can tell champion (>0) from bust (0)
@@ -164,6 +167,21 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
     if (s == null || prev == null || s >= prev) return;
     if (s === 10 || (s >= 1 && s <= 5)) soundManager.play('click');
   }, [actionSecondsLeft]);
+
+  // Read the coach's suggestion aloud (Web Speech API) when it's revealed on
+  // your turn — once per turn, only while speech is on.
+  useEffect(() => {
+    if (!speechOn || !coachEnabled || engine?.isHandOver()) return;
+    if (currentActorId !== 'human' || !advice || !coachRevealed) return;
+    if (spokenTurnRef.current === handNumber) return;
+    spokenTurnRef.current = handNumber;
+    speak(`Coach suggests ${advice.suggestedAction}. ${advice.reasoning[0] ?? ''}`);
+  }, [speechOn, coachEnabled, currentActorId, engine, advice, coachRevealed, handNumber]);
+
+  // Allow a fresh spoken suggestion each time it returns to your turn.
+  useEffect(() => {
+    if (currentActorId !== 'human') spokenTurnRef.current = -1;
+  }, [currentActorId]);
 
   // Auto-advance to the next hand a few seconds after a hand ends, unless paused.
   // nextHand's identity changes every render, so we call it via a ref and key the
@@ -293,6 +311,22 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
           >
             {muted ? '🔇' : '🔊'}
           </button>
+          {speechSupported() && (
+            <button
+              onClick={() => {
+                const next = !speechOn;
+                setSpeechOn(next);
+                setSpeechEnabled(next);
+                if (next) speak('Speech on.');
+              }}
+              className={`rounded-full px-2 py-0.5 text-xs font-semibold transition-colors ${
+                speechOn ? 'bg-indigo-600 text-white hover:bg-indigo-500' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+              }`}
+              title="Read the coach's advice aloud"
+            >
+              🗣
+            </button>
+          )}
           <button
             onClick={() => setPaused((v) => !v)}
             className={`rounded-full px-2 py-0.5 text-xs font-semibold transition-colors ${

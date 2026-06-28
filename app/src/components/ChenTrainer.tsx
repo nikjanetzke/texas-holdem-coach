@@ -28,6 +28,7 @@ export function ChenTrainer() {
   const [hand, setHand] = useState<Card[]>(() => dealHand());
   const [guess, setGuess] = useState<string | null>(null);
   const [timed, setTimed] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
   const [timeLeft, setTimeLeft] = useState(TIME_LIMIT);
   const [stats, setStats] = useState({ correct: 0, total: 0, score: 0, streak: 0, best: 0 });
 
@@ -106,9 +107,16 @@ export function ChenTrainer() {
         </label>
       </div>
 
-      <div className="rounded-lg border border-slate-700 bg-slate-800/60 p-4 text-sm text-slate-300">
-        <p className="mb-2 font-semibold text-slate-100">The Chen formula — score a starting hand fast</p>
-        <ol className="ml-4 list-decimal space-y-1 text-xs">
+      <div className="rounded-lg border border-slate-700 bg-slate-800/60 text-sm text-slate-300">
+        <button
+          onClick={() => setShowHelp((v) => !v)}
+          className="flex w-full items-center justify-between px-4 py-2 text-left font-semibold text-slate-100"
+        >
+          <span>How the Chen formula works</span>
+          <span className="text-slate-500">{showHelp ? '▲' : '▼'}</span>
+        </button>
+        {showHelp && (
+        <ol className="ml-4 list-decimal space-y-1 px-4 pb-3 text-xs">
           <li>
             Take your <span className="text-slate-100">highest card</span>: A = 10, K = 8, Q = 7, J = 6, 10 = 5, and any
             other card = its number ÷ 2 (so a 6 = 3).
@@ -131,6 +139,7 @@ export function ChenTrainer() {
           </li>
           <li>Round to the nearest whole number. Roughly: 10+ premium, 8–9 strong, 6–7 playable, 4–5 marginal, below 4 fold.</li>
         </ol>
+        )}
       </div>
 
       <div className="relative flex items-center justify-center gap-3 py-2">

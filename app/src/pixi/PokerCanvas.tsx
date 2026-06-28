@@ -85,6 +85,15 @@ function clampN(v: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, v));
 }
 
+// Shrink seat boxes as the table fills up so 7–10 players don't overlap.
+function seatScaleFor(total: number): number {
+  if (total <= 6) return 1;
+  if (total === 7) return 0.9;
+  if (total === 8) return 0.82;
+  if (total === 9) return 0.74;
+  return 0.68; // 10
+}
+
 export function PokerCanvas({ seats, communityCards, potTotal, handNumber, winnerIds, width = LOGICAL_W, height = LOGICAL_H }: PokerCanvasProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<Application | null>(null);
@@ -269,6 +278,7 @@ export function PokerCanvas({ seats, communityCards, potTotal, handNumber, winne
     scene.addChild(potContainer);
 
     const total = seats.length;
+    const seatScale = seatScaleFor(total);
     seats.forEach((seat, idx) => {
       const pos = seatPosition(idx, total, LOGICAL_W, LOGICAL_H);
       // Each player's own chip pile, sized to their stack, sits just inside their
@@ -278,6 +288,7 @@ export function PokerCanvas({ seats, communityCards, potTotal, handNumber, winne
         const ox = clampN(pos.x + (LOGICAL_W / 2 - pos.x) * 0.18, 40, LOGICAL_W - 40);
         const oy = clampN(pos.y + (LOGICAL_H / 2 - pos.y) * 0.18, 36, LOGICAL_H - 30);
         const pile = drawChipStack(seat.player.stack);
+        pile.scale.set(seatScale);
         pile.position.set(ox, oy);
         scene.addChild(pile);
       }
@@ -286,15 +297,17 @@ export function PokerCanvas({ seats, communityCards, potTotal, handNumber, winne
       if (seat.player.folded) {
         const fx = pos.x + (LOGICAL_W / 2 - pos.x) * 0.42;
         const fy = pos.y + (LOGICAL_H / 2 - pos.y) * 0.42;
+        const fw = CARD_W_SM * 0.8 * seatScale;
+        const fh = CARD_H_SM * 0.8 * seatScale;
         for (let i = 0; i < 2; i++) {
-          const back = drawCardBack(CARD_W_SM * 0.8, CARD_H_SM * 0.8);
-          back.position.set(fx - CARD_W_SM * 0.8 + i * 16, fy - CARD_H_SM * 0.4 + i * 5);
+          const back = drawCardBack(fw, fh);
+          back.position.set(fx - fw + i * 16 * seatScale, fy - fh / 2 + i * 5 * seatScale);
           back.rotation = (i === 0 ? -0.12 : 0.1);
           back.alpha = 0.85;
           scene.addChild(back);
         }
       }
-      scene.addChild(buildSeatNode(seat, pos.x, pos.y));
+      scene.addChild(buildSeatNode(seat, pos.x, pos.y, seatScale));
       // Chips this player has put in the pot this street, between them and the centre.
       if (seat.player.streetContributed > 0) {
         const chips = drawChipStack(seat.player.streetContributed);
@@ -304,12 +317,12 @@ export function PokerCanvas({ seats, communityCards, potTotal, handNumber, winne
     });
   }
 
-  function buildSeatNode(seat: SeatViewModel, x: number, y: number): Container {
+  function buildSeatNode(seat: SeatViewModel, x: number, y: number, seatScale = 1): Container {
     const c = new Container();
     c.position.set(x, y);
     const { player, isDealer, isSmallBlind, isBigBlind, isActing, isWinner, showCards, handLabel } = seat;
-    // The active player's seat grows so it's unmistakable whose turn it is.
-    if (isActing) c.scale.set(1.14);
+    // Scale down for crowded tables; the active player's seat grows a bit on top.
+    c.scale.set(isActing ? seatScale * 1.12 : seatScale);
 
     const boxW = SEAT_BOX_W;
     const boxH = SEAT_BOX_H;
