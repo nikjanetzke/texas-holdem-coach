@@ -3,7 +3,7 @@ import type { GameSetup } from '../hooks/useGame';
 import { buildDefaultSeats } from '../hooks/useGame';
 import { BLIND_SCHEDULES, DEFAULT_SCHEDULE_ID } from '../engine/blinds';
 import { SCENARIOS } from '../scenarios/scenarios';
-import { ChenTrainer } from './ChenTrainer';
+import { TrainingHub } from './TrainingHub';
 
 export function SetupScreen({ onStart }: { onStart: (setup: GameSetup) => void }) {
   const [entered, setEntered] = useState(false);
@@ -81,7 +81,7 @@ export function SetupScreen({ onStart }: { onStart: (setup: GameSetup) => void }
           </div>
 
           {mode === 'train' ? (
-            <ChenTrainer />
+            <TrainingHub />
           ) : mode === 'scenario' ? (
             <div className="space-y-2.5">
               {SCENARIOS.map((s) => (
