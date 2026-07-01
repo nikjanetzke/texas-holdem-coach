@@ -252,36 +252,49 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
     // player with chips (champion). We remembered your last stack below.
     const won = lastHumanStackRef.current > 0;
     return (
-      <div className="relative flex min-h-[100dvh] flex-col items-center justify-center gap-6 overflow-hidden bg-slate-950 px-4 text-center">
+      <div className="relative flex min-h-[100dvh] flex-col items-center justify-center overflow-hidden bg-slate-950 px-4 text-center">
         <div
           className={`pointer-events-none absolute inset-0 ${
             won
-              ? 'bg-[radial-gradient(ellipse_at_center,_rgba(234,179,8,0.25),_transparent_65%)]'
+              ? 'bg-[radial-gradient(ellipse_at_center,_rgba(234,179,8,0.28),_transparent_65%)]'
               : 'bg-[radial-gradient(ellipse_at_center,_rgba(190,18,60,0.18),_transparent_65%)]'
           }`}
         />
         {won && <CoinBurst />}
-        <div className="animate-pop relative">
+        <div className="animate-pop relative w-full max-w-md overflow-hidden rounded-2xl border border-amber-500/20 bg-gradient-to-b from-slate-900/95 to-slate-950/95 p-8 shadow-[0_24px_70px_-20px_rgba(0,0,0,0.85)] ring-1 ring-white/5">
+          <div className={`pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent ${won ? 'via-amber-400/70' : 'via-rose-500/60'} to-transparent`} />
           {won ? (
             <>
-              <div className="text-6xl">🏆</div>
-              <h1 className="mt-3 text-4xl font-extrabold text-amber-300">Champion!</h1>
-              <p className="mt-2 text-lg text-slate-200">You are the winner — everyone else is out of chips.</p>
+              {!winGifFailed && (
+                <img
+                  src="/assets/poker-animation.gif"
+                  alt=""
+                  onError={() => setWinGifFailed(true)}
+                  className="mx-auto mb-4 w-40 rounded-xl shadow-lg shadow-black/50"
+                />
+              )}
+              <div className="text-5xl">🏆</div>
+              <h1 className="mt-2 bg-gradient-to-b from-amber-200 to-amber-500 bg-clip-text text-4xl font-black text-transparent">
+                Champion!
+              </h1>
+              <p className="mt-2 text-slate-300">You're the last player standing — everyone else is out of chips.</p>
             </>
           ) : (
             <>
-              <div className="text-6xl">💀</div>
-              <h1 className="mt-3 text-4xl font-extrabold text-rose-400">Game over</h1>
-              <p className="mt-2 text-lg text-slate-300">You're out of chips. Better luck next time.</p>
+              <div className="text-5xl">💀</div>
+              <h1 className="mt-2 bg-gradient-to-b from-rose-300 to-rose-500 bg-clip-text text-4xl font-black text-transparent">
+                Game over
+              </h1>
+              <p className="mt-2 text-slate-300">You're out of chips. Better luck next time.</p>
             </>
           )}
+          <button
+            onClick={onExit}
+            className="mt-6 w-full rounded-xl bg-gradient-to-b from-emerald-500 to-emerald-700 py-3 text-lg font-bold text-white shadow-lg shadow-emerald-900/40 ring-1 ring-emerald-400/40 transition-all hover:from-emerald-400 hover:to-emerald-600 active:scale-[0.99]"
+          >
+            ♠ Play again
+          </button>
         </div>
-        <button
-          onClick={onExit}
-          className="relative rounded-xl bg-emerald-600 px-8 py-3 text-lg font-bold text-white shadow-lg hover:bg-emerald-500"
-        >
-          Play again
-        </button>
       </div>
     );
   }
@@ -304,13 +317,14 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
         paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))',
       }}
     >
-      {/* Top bar — compact single row that scrolls horizontally if it overflows. */}
-      <div className="mb-2 flex items-center justify-between gap-2 text-sm text-slate-300">
+      {/* Top bar — premium glass strip; compact row that scrolls if it overflows. */}
+      <div className="relative mb-2 flex items-center justify-between gap-2 overflow-hidden rounded-xl border border-amber-500/15 bg-gradient-to-b from-slate-900/90 to-slate-950/80 px-2.5 py-1.5 text-sm text-slate-300 shadow-lg ring-1 ring-white/5">
+        <div className="pointer-events-none absolute inset-x-6 top-0 h-px bg-gradient-to-r from-transparent via-amber-400/50 to-transparent" />
         <div className="flex min-w-0 items-center gap-2 overflow-x-auto whitespace-nowrap">
           <button onClick={onExit} className="shrink-0 rounded px-1.5 py-1 text-slate-400 hover:bg-slate-800 hover:text-slate-100">
             ←
           </button>
-          <span className="shrink-0 font-semibold">#{handNumber}</span>
+          <span className="shrink-0 font-bold text-amber-200">#{handNumber}</span>
           {setup.scenarioName && (
             <span className="shrink-0 rounded-full bg-purple-900/60 px-2 py-0.5 text-xs text-purple-200">{setup.scenarioName}</span>
           )}
@@ -462,11 +476,12 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
         // fall back to the held suggestion so it's still visible.
         if (liveTurn && advice && !coachRevealed) {
           return (
-            <div className="animate-fade-up mt-4 flex items-center justify-between gap-3 rounded-xl border border-indigo-500/40 bg-indigo-950/40 p-3 text-sm text-slate-300">
+            <div className="animate-fade-up relative mt-4 flex items-center justify-between gap-3 overflow-hidden rounded-xl border border-indigo-400/25 bg-gradient-to-b from-indigo-950/70 to-slate-950/80 p-3 text-sm text-slate-300 shadow-lg ring-1 ring-white/5">
+              <div className="pointer-events-none absolute inset-x-6 top-0 h-px bg-gradient-to-r from-transparent via-indigo-400/60 to-transparent" />
               <span>Decide your play first — then check the coach's take.</span>
               <button
                 onClick={() => setCoachRevealed(true)}
-                className="shrink-0 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-500"
+                className="shrink-0 rounded-lg bg-gradient-to-b from-indigo-500 to-indigo-700 px-3 py-1.5 text-xs font-semibold text-white shadow ring-1 ring-indigo-400/40 hover:from-indigo-400 hover:to-indigo-600"
               >
                 Reveal suggestion
               </button>
@@ -476,9 +491,10 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
         const shown = liveTurn ? advice : heldAdvice;
         if (!shown) return null;
         return (
-          <div className="animate-fade-up mt-4 rounded-xl border border-indigo-500/40 bg-indigo-950/40 p-3 text-sm text-slate-200">
+          <div className="animate-fade-up relative mt-4 overflow-hidden rounded-xl border border-indigo-400/25 bg-gradient-to-b from-indigo-950/70 to-slate-950/80 p-3 text-sm text-slate-200 shadow-lg ring-1 ring-white/5">
+            <div className="pointer-events-none absolute inset-x-6 top-0 h-px bg-gradient-to-r from-transparent via-indigo-400/60 to-transparent" />
             <div className="mb-2 flex flex-wrap items-center gap-2">
-              <span className="rounded bg-indigo-600 px-2 py-0.5 text-xs font-bold uppercase tracking-wide">Coach</span>
+              <span className="rounded bg-gradient-to-b from-indigo-500 to-indigo-700 px-2 py-0.5 text-xs font-bold uppercase tracking-wide text-white shadow ring-1 ring-indigo-400/40">Coach</span>
               <span className="font-semibold">
                 Suggests: <span className="text-amber-300 capitalize">{shown.suggestedAction}</span>
               </span>
