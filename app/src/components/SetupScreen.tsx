@@ -14,6 +14,10 @@ export function SetupScreen({ onStart }: { onStart: (setup: GameSetup) => void }
   const [startingStack, setStartingStack] = useState('10000');
   const [scheduleId, setScheduleId] = useState(DEFAULT_SCHEDULE_ID);
   const [actionTimerSeconds, setActionTimerSeconds] = useState<number | null>(null);
+  // Table preferences — defaults per request: coach off, speech off, auto-advance on.
+  const [coachDefault, setCoachDefault] = useState(false);
+  const [speechDefault, setSpeechDefault] = useState(false);
+  const [autoAdvanceDefault, setAutoAdvanceDefault] = useState(true);
 
   // Landing splash: the full Poker IQ hero with a single Start button. Clicking
   // through reveals the game menu (quick game / scenario / training).
@@ -109,6 +113,12 @@ export function SetupScreen({ onStart }: { onStart: (setup: GameSetup) => void }
               setScheduleId={setScheduleId}
               actionTimerSeconds={actionTimerSeconds}
               setActionTimerSeconds={setActionTimerSeconds}
+              coachDefault={coachDefault}
+              setCoachDefault={setCoachDefault}
+              speechDefault={speechDefault}
+              setSpeechDefault={setSpeechDefault}
+              autoAdvanceDefault={autoAdvanceDefault}
+              setAutoAdvanceDefault={setAutoAdvanceDefault}
               onStart={onStart}
             />
           )}
@@ -124,6 +134,40 @@ function clampInt(value: string, min: number, max: number, fallback: number): nu
   const n = Number(value);
   if (!Number.isFinite(n) || value.trim() === '') return fallback;
   return Math.min(max, Math.max(min, Math.round(n)));
+}
+
+function OptionToggle({
+  label,
+  hint,
+  checked,
+  onChange,
+}: {
+  label: string;
+  hint: string;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  return (
+    <label className="flex items-center justify-between gap-3 rounded-lg border border-slate-700 bg-slate-800 px-3 py-2">
+      <span>
+        <span className="block text-sm text-slate-200">{label}</span>
+        <span className="block text-xs text-slate-400">{hint}</span>
+      </span>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        onClick={() => onChange(!checked)}
+        className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${checked ? 'bg-emerald-600' : 'bg-slate-600'}`}
+      >
+        <span
+          className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-transform ${
+            checked ? 'translate-x-5' : 'translate-x-0.5'
+          }`}
+        />
+      </button>
+    </label>
+  );
 }
 
 function ModeTab({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
@@ -150,6 +194,12 @@ function QuickGameForm({
   setScheduleId,
   actionTimerSeconds,
   setActionTimerSeconds,
+  coachDefault,
+  setCoachDefault,
+  speechDefault,
+  setSpeechDefault,
+  autoAdvanceDefault,
+  setAutoAdvanceDefault,
   onStart,
 }: {
   numPlayers: string;
@@ -160,6 +210,12 @@ function QuickGameForm({
   setScheduleId: (id: string) => void;
   actionTimerSeconds: number | null;
   setActionTimerSeconds: (n: number | null) => void;
+  coachDefault: boolean;
+  setCoachDefault: (v: boolean) => void;
+  speechDefault: boolean;
+  setSpeechDefault: (v: boolean) => void;
+  autoAdvanceDefault: boolean;
+  setAutoAdvanceDefault: (v: boolean) => void;
   onStart: (setup: GameSetup) => void;
 }) {
   return (
@@ -249,6 +305,28 @@ function QuickGameForm({
         </span>
       </label>
 
+      <div className="mb-6 space-y-2">
+        <span className="block text-xs font-medium uppercase tracking-wide text-slate-400">Table options</span>
+        <OptionToggle
+          label="Coaching"
+          hint="In-game advice, hints and decision scoring."
+          checked={coachDefault}
+          onChange={setCoachDefault}
+        />
+        <OptionToggle
+          label="Voice"
+          hint="Read your turn (and coaching, when on) aloud."
+          checked={speechDefault}
+          onChange={setSpeechDefault}
+        />
+        <OptionToggle
+          label="Auto next hand"
+          hint="Deal the next hand automatically after each result."
+          checked={autoAdvanceDefault}
+          onChange={setAutoAdvanceDefault}
+        />
+      </div>
+
       <button
         className="w-full rounded-xl bg-gradient-to-b from-emerald-500 to-emerald-700 py-3 text-base font-bold text-white shadow-lg shadow-emerald-900/40 ring-1 ring-emerald-400/40 transition-all hover:from-emerald-400 hover:to-emerald-600 active:scale-[0.99]"
         onClick={() =>
@@ -257,6 +335,9 @@ function QuickGameForm({
             startingStack: clampInt(startingStack, 100, 1_000_000, 1000),
             scheduleId,
             actionTimerSeconds: actionTimerSeconds ?? undefined,
+            coachDefault,
+            speechDefault,
+            autoAdvanceDefault,
           })
         }
       >

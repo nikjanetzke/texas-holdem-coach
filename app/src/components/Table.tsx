@@ -57,8 +57,15 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
   const [showMath, setShowMath] = useState(false);
   const [openPanel, setOpenPanel] = useState<'stats' | 'history' | 'export' | null>('stats');
   const [showMenu, setShowMenu] = useState(false);
-  const [paused, setPaused] = useState(false);
-  const [speechOn, setSpeechOn] = useState(false);
+  // Auto-advance defaults on (paused = false); the setup screen can flip these.
+  const [paused, setPaused] = useState(!(setup.autoAdvanceDefault ?? true));
+  const [speechOn, setSpeechOn] = useState(setup.speechDefault ?? false);
+
+  // Honour a "speech on by default" choice from the setup screen.
+  useEffect(() => {
+    if (setup.speechDefault) setSpeechEnabled(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [winGifFailed, setWinGifFailed] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
   const [chatText, setChatText] = useState('');
@@ -111,13 +118,19 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
   const validActions =
     engine && !engine.isHandOver() && currentActorId === 'human' ? engine.getValidActions('human') : null;
 
-  // Reset the bet sizing slider to a sensible default whenever it's the human's turn.
+  // Reset the bet sizing slider to a sensible default only when a genuinely new
+  // decision point arrives — NOT on every render. `validActions` is a fresh object
+  // each render, so keying the effect on it made the once-a-second clock tick
+  // reset the slider mid-drag (the desktop "slider doesn't work" bug). Keying on a
+  // stable signature (whose turn, street, price, hand) fixes that.
+  const turnSignature =
+    validActions && engine ? `${currentActorId}|${engine.street}|${engine.currentBet}|${handNumber}` : null;
   useEffect(() => {
-    if (validActions) {
-      const opening = validActions.types.includes('raise') ? validActions.minRaiseTo : currentLevel.bigBlind;
-      setRaiseAmount(Math.min(validActions.maxRaiseTo, opening));
-    }
-  }, [validActions, currentLevel.bigBlind]);
+    if (!turnSignature || !validActions) return;
+    const opening = validActions.types.includes('raise') ? validActions.minRaiseTo : currentLevel.bigBlind;
+    setRaiseAmount(Math.min(validActions.maxRaiseTo, opening));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [turnSignature]);
 
   // Play a sound effect for every new action logged (human or bot) and on showdown.
   useEffect(() => {
@@ -370,19 +383,21 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
           </span>
           <button
             onClick={() => setCoachEnabled((v) => !v)}
-            className={`rounded-full px-2 py-0.5 text-xs font-semibold transition-colors ${
+            className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold transition-colors sm:text-sm ${
               coachEnabled ? 'bg-indigo-600 text-white hover:bg-indigo-500' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
             }`}
-            title="Leaks are still tracked in the background even when the coach panel is hidden."
+            title="Show/hide coaching. Leaks are still tracked in the background when off."
           >
-            Coach
+            🎓 Coach <span className={coachEnabled ? 'text-emerald-300' : 'text-slate-500'}>{coachEnabled ? 'On' : 'Off'}</span>
           </button>
           <button
             onClick={toggleMuted}
-            className="rounded-full bg-slate-800 px-2 py-0.5 text-xs font-semibold text-slate-300 hover:bg-slate-700"
+            className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold transition-colors sm:text-sm ${
+              muted ? 'bg-slate-800 text-slate-400 hover:bg-slate-700' : 'bg-emerald-700 text-white hover:bg-emerald-600'
+            }`}
             title="Toggle sound effects"
           >
-            {muted ? '🔇' : '🔊'}
+            {muted ? '🔇 Sound Off' : '🔊 Sound On'}
           </button>
           {speechSupported() && (
             <button
@@ -392,12 +407,12 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
                 setSpeechEnabled(next);
                 if (next) speak('Speech on.');
               }}
-              className={`rounded-full px-2 py-0.5 text-xs font-semibold transition-colors ${
+              className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold transition-colors sm:text-sm ${
                 speechOn ? 'bg-indigo-600 text-white hover:bg-indigo-500' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
               }`}
-              title="Read the coach's advice aloud"
+              title="Read your turn (and the coach's advice, when the coach is on) aloud"
             >
-              🗣
+              {speechOn ? '🗣 Voice On' : '🔕 Voice Off'}
             </button>
           )}
           <button
@@ -648,9 +663,9 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
           {(validActions.types.includes('bet') || validActions.types.includes('raise')) && (
             <div className="mb-2 flex items-center gap-2">
               <div className="flex gap-1">
-                <QuickBet label="½" onClick={() => setRaiseAmount(clamp(Math.round(potTotal * 0.5), validActions, currentLevel.bigBlind))} />
-                <QuickBet label="pot" onClick={() => setRaiseAmount(clamp(potTotal, validActions, currentLevel.bigBlind))} />
-                <QuickBet label="max" onClick={() => setRaiseAmount(validActions.maxRaiseTo)} />
+                <QuickBet label="½ pot" onClick={() => setRaiseAmount(clamp(Math.round(potTotal * 0.5), validActions, currentLevel.bigBlind))} />
+                <QuickBet label="¾ pot" onClick={() => setRaiseAmount(clamp(Math.round(potTotal * 0.75), validActions, currentLevel.bigBlind))} />
+                <QuickBet label="Pot" onClick={() => setRaiseAmount(clamp(potTotal, validActions, currentLevel.bigBlind))} />
               </div>
               <input
                 type="range"

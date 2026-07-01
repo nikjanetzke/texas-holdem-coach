@@ -30,6 +30,10 @@ export interface GameSetup {
   scenarioName?: string;
   /** Seconds the human has to act before auto-folding (or auto-checking if free). Undefined/0 = no timer. */
   actionTimerSeconds?: number;
+  /** Starting preferences chosen on the setup screen. Defaults: coach off, speech off, auto-advance on. */
+  coachDefault?: boolean;
+  speechDefault?: boolean;
+  autoAdvanceDefault?: boolean;
 }
 
 export interface HandSummaryEntry {
@@ -119,7 +123,7 @@ export function useGame(setup: GameSetup) {
   const [advice, setAdvice] = useState<CoachAdvice | null>(null);
   const [handSummary, setHandSummary] = useState<HandSummaryEntry[] | null>(null);
   const [handHistory, setHandHistory] = useState<HandRecord[]>(initialSaved?.handHistory ?? []);
-  const [coachEnabled, setCoachEnabled] = useState(initialSaved?.coachEnabled ?? true);
+  const [coachEnabled, setCoachEnabled] = useState(initialSaved?.coachEnabled ?? setup.coachDefault ?? false);
   // Pre-press: a fold/check/call the human queued before it was their turn.
   // When their turn arrives it auto-executes if still legal, else is discarded.
   const [queuedAction, setQueuedAction] = useState<ActionType | null>(null);
