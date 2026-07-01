@@ -224,6 +224,11 @@ export function useGame(setup: GameSetup) {
       const player = engine.players.find((p) => p.id === actorId)!;
       const valid = engine.getValidActions(actorId);
       const numOpponents = engine.players.filter((p) => !p.folded && !p.sittingOut && p.id !== actorId).length;
+      // Where this bot sits in the action order (0 = first to act, 1 = last),
+      // so the AI can play tighter early and steal/bluff more in late position.
+      const live = engine.actingOrder.filter((si) => !engine.players[si].folded && !engine.players[si].sittingOut);
+      const posIdx = live.findIndex((si) => engine.players[si].id === actorId);
+      const positionFraction = live.length > 1 && posIdx >= 0 ? posIdx / (live.length - 1) : 0.5;
       const decision = decideAIAction({
         holeCards: player.holeCards,
         communityCards: engine.communityCards,
@@ -235,6 +240,8 @@ export function useGame(setup: GameSetup) {
         minRaiseTo: valid.minRaiseTo,
         validActions: valid.types,
         profile: seat.profile!,
+        positionFraction,
+        bigBlind: currentLevel.bigBlind,
       });
       try {
         engine.act(actorId, decision.type, decision.amount);
