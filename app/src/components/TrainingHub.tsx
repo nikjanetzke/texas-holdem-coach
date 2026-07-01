@@ -1,17 +1,19 @@
 import { useState } from 'react';
 import { ChenTrainer } from './ChenTrainer';
 import { OutsTrainer } from './OutsTrainer';
+import { PotOddsTrainer } from './PotOddsTrainer';
 
 // Groups the practice drills under sub-tabs inside the Training tab.
 export function TrainingHub() {
-  const [drill, setDrill] = useState<'chen' | 'outs'>('chen');
+  const [drill, setDrill] = useState<'chen' | 'outs' | 'potodds'>('chen');
   return (
     <div className="space-y-4">
       <div className="flex gap-1 rounded-lg bg-slate-950/60 p-1 ring-1 ring-slate-700/50">
         <SubTab label="Starting hands" active={drill === 'chen'} onClick={() => setDrill('chen')} />
         <SubTab label="Draws & outs" active={drill === 'outs'} onClick={() => setDrill('outs')} />
+        <SubTab label="Call or fold?" active={drill === 'potodds'} onClick={() => setDrill('potodds')} />
       </div>
-      {drill === 'chen' ? <ChenTrainer /> : <OutsTrainer />}
+      {drill === 'chen' ? <ChenTrainer /> : drill === 'outs' ? <OutsTrainer /> : <PotOddsTrainer />}
     </div>
   );
 }

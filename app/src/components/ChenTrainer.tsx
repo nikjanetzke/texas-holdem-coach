@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Card } from '../engine/deck';
 import { RANKS, SUITS, shuffle } from '../engine/deck';
 import { chenBreakdown } from '../engine/preflop';
+import { recordDrillResult } from '../persistence/drillStats';
 
 const SUIT_CHARS: Record<Card['suit'], string> = { s: '♠', h: '♥', d: '♦', c: '♣' };
 const rankLabel = (r: Card['rank']) => (r === 'T' ? '10' : r);
@@ -57,6 +58,7 @@ export function ChenTrainer() {
     // Faster answers score more when the timer is on; flat points otherwise.
     const speedBonus = timed ? Math.round((timeLeftRef.current / TIME_LIMIT) * 50) : 0;
     const gained = correct ? 50 + speedBonus + stats.streak * 5 : 0;
+    recordDrillResult('chen', correct);
     setGuess(choice);
     setStats((s) => {
       const streak = correct ? s.streak + 1 : 0;

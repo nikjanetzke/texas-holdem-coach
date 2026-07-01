@@ -9,6 +9,7 @@ import {
   outsOptions,
   type DrawType,
 } from '../engine/outsDrill';
+import { recordDrillResult } from '../persistence/drillStats';
 
 const SUIT_CHARS: Record<Card['suit'], string> = { s: '♠', h: '♥', d: '♦', c: '♣' };
 const rankLabel = (r: Card['rank']) => (r === 'T' ? '10' : r);
@@ -56,6 +57,7 @@ export function OutsTrainer() {
     const correct = choice === scenario.outs;
     const speedBonus = timed ? Math.round((timeLeftRef.current / TIME_LIMIT) * 50) : 0;
     const gained = correct ? 50 + speedBonus + stats.streak * 5 : 0;
+    recordDrillResult('outs', correct);
     setGuess(choice);
     setStats((s) => {
       const streak = correct ? s.streak + 1 : 0;

@@ -2,6 +2,7 @@ import { type CSSProperties, type ReactNode, useCallback, useEffect, useRef, use
 import type { GameSetup } from '../hooks/useGame';
 import { useGame } from '../hooks/useGame';
 import { HandHistoryPanel } from './HandHistoryPanel';
+import { StatsPanel } from './StatsPanel';
 import { ExportControls } from './ExportControls';
 import { HAND_RANK_NAMES } from '../engine/evaluator';
 import type { ActionType } from '../engine/betting';
@@ -52,7 +53,7 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
   const [heldAdvice, setHeldAdvice] = useState<typeof advice>(null);
   const [showCardRating, setShowCardRating] = useState(false);
   const [showMath, setShowMath] = useState(false);
-  const [openPanel, setOpenPanel] = useState<'history' | 'export' | null>(null);
+  const [openPanel, setOpenPanel] = useState<'stats' | 'history' | 'export' | null>('stats');
   const [showMenu, setShowMenu] = useState(false);
   const [paused, setPaused] = useState(false);
   const [speechOn, setSpeechOn] = useState(false);
@@ -666,12 +667,19 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-lg font-bold text-slate-100">Hand history &amp; export</h2>
+              <h2 className="text-lg font-bold text-slate-100">Stats, history &amp; export</h2>
               <button onClick={() => setShowMenu(false)} className="rounded px-2 py-1 text-slate-400 hover:bg-slate-800 hover:text-slate-100">
                 ✕
               </button>
             </div>
             <div className="space-y-2">
+              <Collapsible
+                label="Your stats"
+                open={openPanel === 'stats'}
+                onToggle={() => setOpenPanel((p) => (p === 'stats' ? null : 'stats'))}
+              >
+                <StatsPanel history={handHistory} leaks={leaks} />
+              </Collapsible>
               <Collapsible
                 label={`Hand history${handHistory.length ? ` (${handHistory.length})` : ''}`}
                 open={openPanel === 'history'}
