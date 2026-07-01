@@ -58,6 +58,8 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
   const [paused, setPaused] = useState(false);
   const [speechOn, setSpeechOn] = useState(false);
   const [winGifFailed, setWinGifFailed] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatText, setChatText] = useState('');
   const prevSecLeftRef = useRef<number | null>(null);
   const spokenTurnRef = useRef<number>(-1);
   const feltObserverRef = useRef<ResizeObserver | null>(null);
@@ -239,6 +241,21 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
     if (!next) soundManager.play('click');
   }
 
+  // Show a typed message as a speech bubble over your seat. (AI replies come later.)
+  function sendChat(text: string) {
+    const msg = text.trim().slice(0, 60);
+    if (!msg) return;
+    setSpeechByPlayer((prev) => ({ ...prev, human: msg }));
+    setChatText('');
+    setTimeout(() => {
+      setSpeechByPlayer((prev) => {
+        if (prev['human'] !== msg) return prev;
+        const { human: _omit, ...rest } = prev;
+        return rest;
+      });
+    }, 4000);
+  }
+
   function toggleFullscreen() {
     if (document.fullscreenElement) {
       document.exitFullscreen?.();
@@ -378,6 +395,15 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
             </button>
           )}
           <button
+            onClick={() => setChatOpen((v) => !v)}
+            className={`rounded-full px-2 py-0.5 text-xs font-semibold transition-colors ${
+              chatOpen ? 'bg-indigo-600 text-white hover:bg-indigo-500' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+            }`}
+            title="Say something to the table"
+          >
+            💬
+          </button>
+          <button
             onClick={() => setPaused((v) => !v)}
             className={`rounded-full px-2 py-0.5 text-xs font-semibold transition-colors ${
               paused ? 'bg-amber-600 text-white hover:bg-amber-500' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
@@ -402,6 +428,34 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
           </button>
         </div>
       </div>
+
+      {/* Chat: type a line that pops as a bubble over your seat. */}
+      {chatOpen && (
+        <div className="fixed inset-x-0 bottom-3 z-40 flex justify-center px-4">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              sendChat(chatText);
+            }}
+            className="flex w-full max-w-md items-center gap-2 rounded-xl border border-indigo-400/30 bg-slate-900/95 p-2 shadow-2xl ring-1 ring-white/5"
+          >
+            <input
+              autoFocus
+              value={chatText}
+              maxLength={60}
+              onChange={(e) => setChatText(e.target.value)}
+              placeholder="Say something to the table…"
+              className="flex-1 rounded-lg bg-slate-800 px-3 py-2 text-sm text-slate-100 outline-none placeholder:text-slate-500 focus:ring-2 focus:ring-indigo-500/40"
+            />
+            <button type="submit" className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500">
+              Send
+            </button>
+            <button type="button" onClick={() => setChatOpen(false)} className="rounded-lg px-2 py-2 text-slate-400 hover:text-slate-100">
+              ✕
+            </button>
+          </form>
+        </div>
+      )}
 
       {/* Win celebration — win gif (if present) + coin burst + banner. */}
       {isHandOver && payouts['human'] > 0 && (
