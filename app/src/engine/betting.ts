@@ -18,6 +18,9 @@ export interface BettingAction {
 export interface Pot {
   amount: number;
   eligiblePlayerIds: string[];
+  /** Everyone who put chips into this layer (winners come from eligiblePlayerIds;
+   *  payerIds is used to refund a layer no eligible player can win — an uncalled bet). */
+  payerIds: string[];
 }
 
 /**
@@ -40,7 +43,7 @@ export function computeSidePots(
     const amount = slice * payers.length;
     if (amount > 0) {
       const eligiblePlayerIds = payers.filter((p) => !p.folded).map((p) => p.id);
-      pots.push({ amount, eligiblePlayerIds });
+      pots.push({ amount, eligiblePlayerIds, payerIds: payers.map((p) => p.id) });
     }
     previousLevel = level;
   }
@@ -54,6 +57,7 @@ function mergePotsWithSameEligibility(pots: Pot[]): Pot[] {
     const last = merged[merged.length - 1];
     if (last && sameMembers(last.eligiblePlayerIds, pot.eligiblePlayerIds)) {
       last.amount += pot.amount;
+      last.payerIds = [...new Set([...last.payerIds, ...pot.payerIds])];
     } else {
       merged.push({ ...pot });
     }

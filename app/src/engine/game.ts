@@ -105,6 +105,13 @@ export class HandEngine {
 
   private dealAndPostBlinds(): void {
     const active = this.activeSeats();
+    // The dealer button can be passed to us on a seat that's since busted (its
+    // player is sitting out). Move it to the next active seat so the heads-up
+    // blind logic and acting order below never build a hand around a phantom
+    // seat — which used to drop a live player from the hand and lose chips.
+    if (active.length > 0 && this.players[this.dealerSeat].sittingOut) {
+      this.dealerSeat = this.nextSeat(this.dealerSeat);
+    }
     this.dealHoleCards(active);
 
     // Antes are dead money: they go to the pot (totalContributed) but do not count
@@ -366,7 +373,23 @@ export class HandEngine {
     const payouts: Record<string, number> = {};
     for (const pot of pots) {
       const contenders = pot.eligiblePlayerIds;
-      if (contenders.length === 0) continue;
+      if (contenders.length === 0) {
+        // No eligible winner for this layer — it's an uncalled bet (every payer
+        // folded). Return the chips to whoever put them in instead of dropping
+        // them, keeping total chips conserved.
+        const refundTo = pot.payerIds;
+        if (refundTo.length > 0) {
+          const share = Math.floor(pot.amount / refundTo.length);
+          let remainder = pot.amount - share * refundTo.length;
+          for (const id of refundTo) {
+            const back = share + (remainder > 0 ? 1 : 0);
+            if (remainder > 0) remainder--;
+            const player = this.players.find((p) => p.id === id);
+            if (player) player.stack += back;
+          }
+        }
+        continue;
+      }
       let winners: string[];
       if (live.length === 1) {
         winners = [live[0].id];

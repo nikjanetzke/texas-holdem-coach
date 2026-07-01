@@ -32,6 +32,8 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
     handNumber,
     leakTracker,
     humanAct,
+    queuedAction,
+    queueAction,
     nextHand,
     handHistory,
     coachEnabled,
@@ -207,14 +209,18 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
   // whenever speech is on and the advice has been computed. Independent of the
   // coach panel / reveal gate so you always hear something.
   useEffect(() => {
+    // Voice coaching is gated on the coach toggle: with the coach off, speech
+    // still announces your turn but no longer reads out the suggestion/reasoning.
     if (!speechOn || engine?.isHandOver()) return;
     if (currentActorId !== 'human' || !advice) return;
     if (spokenTurnRef.current === handNumber) return;
     spokenTurnRef.current = handNumber;
     speak(
-      `It's your turn. Coach suggests ${advice.suggestedAction}. ${advice.reasoning[0] ?? ''}`,
+      coachEnabled
+        ? `It's your turn. Coach suggests ${advice.suggestedAction}. ${advice.reasoning[0] ?? ''}`
+        : `It's your turn.`,
     );
-  }, [speechOn, currentActorId, engine, advice, handNumber]);
+  }, [speechOn, currentActorId, engine, advice, handNumber, coachEnabled]);
 
   // Allow a fresh spoken suggestion each time it returns to your turn.
   useEffect(() => {
@@ -587,7 +593,11 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
         >
           <div className="mb-2 flex items-center justify-between">
             <span className={`text-sm font-bold ${validActions ? 'text-emerald-300' : 'text-slate-400'}`}>
-              {validActions ? '● Your turn' : '○ Waiting for other players…'}
+              {validActions
+                ? '● Your turn'
+                : queuedAction
+                  ? `○ Pre-press queued: ${queuedAction} — will play on your turn`
+                  : '○ Waiting — tap to pre-press'}
             </span>
             {validActions && actionSecondsLeft != null && (
               <span className={`font-mono text-sm font-bold ${actionSecondsLeft <= 5 ? 'text-rose-400' : 'text-slate-300'}`}>
@@ -596,12 +606,29 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
             )}
           </div>
           {!validActions ? (
-            // Buttons stay visible (greyed) when it isn't your turn, so the layout
-            // never jumps and you can see what's coming.
+            // Not your turn yet: Fold/Check/Call can be *pre-pressed* — the action
+            // is queued and auto-plays when your turn arrives (discarded if it's no
+            // longer legal, e.g. a queued Check when you're then facing a bet).
+            // Bet/Raise/All-in need a live amount, so they stay disabled here.
             <div className="flex flex-wrap gap-1.5">
-              <ActionButton label="Fold" tone="danger" disabled onClick={() => {}} />
-              <ActionButton label="Check" tone="neutral" disabled onClick={() => {}} />
-              <ActionButton label="Call" tone="primary" disabled onClick={() => {}} />
+              <ActionButton
+                label="Fold"
+                tone="danger"
+                active={queuedAction === 'fold'}
+                onClick={() => queueAction('fold')}
+              />
+              <ActionButton
+                label="Check"
+                tone="neutral"
+                active={queuedAction === 'check'}
+                onClick={() => queueAction('check')}
+              />
+              <ActionButton
+                label="Call"
+                tone="primary"
+                active={queuedAction === 'call'}
+                onClick={() => queueAction('call')}
+              />
               <ActionButton label="Raise" tone="primary" disabled onClick={() => {}} />
               <ActionButton label="All in" tone="danger" disabled onClick={() => {}} />
             </div>
@@ -988,11 +1015,13 @@ function ActionButton({
   onClick,
   tone,
   disabled,
+  active,
 }: {
   label: string;
   onClick: () => void;
   tone: 'primary' | 'danger' | 'neutral';
   disabled?: boolean;
+  active?: boolean;
 }) {
   const tones = {
     primary: 'bg-emerald-600 hover:bg-emerald-500',
@@ -1005,9 +1034,9 @@ function ActionButton({
       disabled={disabled}
       className={`rounded-lg px-4 py-2 text-sm font-bold text-white transition-colors ${tones[tone]} ${
         disabled ? 'cursor-not-allowed opacity-40 saturate-50' : ''
-      }`}
+      } ${active ? 'ring-2 ring-amber-300 ring-offset-2 ring-offset-slate-900' : ''}`}
     >
-      {label}
+      {active ? `✓ ${label}` : label}
     </button>
   );
 }

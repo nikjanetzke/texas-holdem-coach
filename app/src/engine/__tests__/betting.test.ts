@@ -9,7 +9,7 @@ describe('computeSidePots', () => {
       { id: 'b', totalContributed: 100, folded: false },
       { id: 'c', totalContributed: 100, folded: false },
     ]);
-    expect(pots).toEqual([{ amount: 300, eligiblePlayerIds: ['a', 'b', 'c'] }]);
+    expect(pots).toEqual([{ amount: 300, eligiblePlayerIds: ['a', 'b', 'c'], payerIds: ['a', 'b', 'c'] }]);
   });
 
   it('builds a side pot when one player is short-stacked all-in', () => {
@@ -20,8 +20,8 @@ describe('computeSidePots', () => {
       { id: 'c', totalContributed: 200, folded: false },
     ]);
     expect(pots).toEqual([
-      { amount: 150, eligiblePlayerIds: ['a', 'b', 'c'] },
-      { amount: 300, eligiblePlayerIds: ['b', 'c'] },
+      { amount: 150, eligiblePlayerIds: ['a', 'b', 'c'], payerIds: ['a', 'b', 'c'] },
+      { amount: 300, eligiblePlayerIds: ['b', 'c'], payerIds: ['b', 'c'] },
     ]);
   });
 
@@ -31,7 +31,7 @@ describe('computeSidePots', () => {
       { id: 'b', totalContributed: 100, folded: false },
       { id: 'c', totalContributed: 100, folded: false },
     ]);
-    expect(pots).toEqual([{ amount: 300, eligiblePlayerIds: ['b', 'c'] }]);
+    expect(pots).toEqual([{ amount: 300, eligiblePlayerIds: ['b', 'c'], payerIds: ['a', 'b', 'c'] }]);
   });
 
   it('handles multiple all-in levels creating multiple side pots', () => {
@@ -42,9 +42,9 @@ describe('computeSidePots', () => {
       { id: 'd', totalContributed: 60, folded: false },
     ]);
     expect(pots).toEqual([
-      { amount: 40, eligiblePlayerIds: ['a', 'b', 'c', 'd'] },
-      { amount: 60, eligiblePlayerIds: ['b', 'c', 'd'] },
-      { amount: 60, eligiblePlayerIds: ['c', 'd'] },
+      { amount: 40, eligiblePlayerIds: ['a', 'b', 'c', 'd'], payerIds: ['a', 'b', 'c', 'd'] },
+      { amount: 60, eligiblePlayerIds: ['b', 'c', 'd'], payerIds: ['b', 'c', 'd'] },
+      { amount: 60, eligiblePlayerIds: ['c', 'd'], payerIds: ['c', 'd'] },
     ]);
   });
 });

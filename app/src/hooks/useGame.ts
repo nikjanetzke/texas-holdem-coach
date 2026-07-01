@@ -106,6 +106,13 @@ export function useGame(setup: GameSetup) {
   const [stacks, setStacks] = useState<Record<string, number>>(
     () => initialSaved?.stacks ?? Object.fromEntries(setup.seats.map((s) => [s.id, s.stack ?? setup.startingStack])),
   );
+  // Always-current mirror of `stacks`. The settle effect writes credited stacks
+  // here synchronously (before the async setStacks re-render) so that when
+  // nextHand -> startHand runs in the same tick it reads the real post-win
+  // stacks, not a stale render closure. This is the fix for winnings that
+  // "didn't get added on" after an all-in.
+  const stacksRef = useRef(stacks);
+  stacksRef.current = stacks;
   const [dealerSeat, setDealerSeat] = useState(initialSaved?.dealerSeat ?? 0);
   const [handNumber, setHandNumber] = useState(initialSaved?.handNumber ?? 1);
   const [engine, setEngine] = useState<HandEngine | null>(null);
@@ -113,6 +120,9 @@ export function useGame(setup: GameSetup) {
   const [handSummary, setHandSummary] = useState<HandSummaryEntry[] | null>(null);
   const [handHistory, setHandHistory] = useState<HandRecord[]>(initialSaved?.handHistory ?? []);
   const [coachEnabled, setCoachEnabled] = useState(initialSaved?.coachEnabled ?? true);
+  // Pre-press: a fold/check/call the human queued before it was their turn.
+  // When their turn arrives it auto-executes if still legal, else is discarded.
+  const [queuedAction, setQueuedAction] = useState<ActionType | null>(null);
   const leakTracker = useRef(LeakTracker.fromJSON(initialSaved?.leakCounts));
   const [, forceRender] = useState(0);
 
@@ -142,11 +152,12 @@ export function useGame(setup: GameSetup) {
   const currentHandTimingsRef = useRef<DecisionTiming[]>([]);
 
   const startHand = useCallback((dealer: number) => {
-    const activeSeats = setup.seats.filter((s) => stacks[s.id] > 0);
+    const currentStacks = stacksRef.current;
+    const activeSeats = setup.seats.filter((s) => currentStacks[s.id] > 0);
     if (activeSeats.length < 2) return;
     const level = levelAt(schedule, levelIndexRef.current);
     const newEngine = new HandEngine({
-      players: setup.seats.map((s) => ({ id: s.id, name: s.name, stack: stacks[s.id] })),
+      players: setup.seats.map((s) => ({ id: s.id, name: s.name, stack: currentStacks[s.id] })),
       dealerSeat: dealer,
       smallBlind: level.smallBlind,
       bigBlind: level.bigBlind,
@@ -158,7 +169,8 @@ export function useGame(setup: GameSetup) {
     setAdvice(null);
     currentHandTimingsRef.current = [];
     turnStartRef.current = null;
-  }, [setup, stacks, schedule]);
+    setQueuedAction(null); // a fresh hand clears any leftover pre-press
+  }, [setup, schedule]);
 
   useEffect(() => {
     startHand(dealerSeat);
@@ -268,6 +280,9 @@ export function useGame(setup: GameSetup) {
 
     const newStacks: Record<string, number> = {};
     for (const p of engine.players) newStacks[p.id] = p.stack;
+    // Update the ref synchronously so a nextHand() in this same tick reads the
+    // credited (post-win) stacks even before the setStacks re-render lands.
+    stacksRef.current = { ...stacksRef.current, ...newStacks };
     setStacks((prev) => ({ ...prev, ...newStacks }));
     setHandSummary((prev) => prev ?? []);
 
@@ -343,6 +358,27 @@ export function useGame(setup: GameSetup) {
     forceRender((n) => n + 1);
   }, [engine, advice]);
 
+  // Pre-press: queue an action for when it becomes the human's turn. Clicking the
+  // same queued action again toggles it off. Toggling here does not touch the
+  // engine — the execution effect below does that once it's actually our turn.
+  const queueAction = useCallback((type: ActionType) => {
+    setQueuedAction((prev) => (prev === type ? null : type));
+  }, []);
+
+  // When it becomes the human's turn, fire any queued pre-press action — but only
+  // if it's still legal for the current spot (e.g. a queued "call" is discarded
+  // if there's now nothing to call, a queued "check" if we're facing a bet).
+  useEffect(() => {
+    if (!queuedAction || currentActorId !== 'human' || !engine || engine.isHandOver()) return;
+    const valid = engine.getValidActions('human');
+    if (valid.types.includes(queuedAction)) {
+      humanAct(queuedAction);
+    }
+    // Legal or not, the pre-press is consumed once our turn arrives.
+    setQueuedAction(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [queuedAction, currentActorId, engine]);
+
   // Auto-act for the human once their action timer expires: check if free, otherwise fold.
   useEffect(() => {
     if (actionSecondsLeft !== 0 || currentActorId !== 'human' || !engine || engine.isHandOver()) return;
@@ -374,6 +410,8 @@ export function useGame(setup: GameSetup) {
     handNumber,
     leakTracker: leakTracker.current,
     humanAct,
+    queuedAction,
+    queueAction,
     nextHand,
     stacks,
     handHistory,
