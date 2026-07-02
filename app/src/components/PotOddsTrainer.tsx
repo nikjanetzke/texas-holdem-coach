@@ -1,31 +1,46 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import type { Card } from '../engine/deck';
+import { ALL_DRAWS, DRAW_LABELS, comeDescription, outsOptions } from '../engine/outsDrill';
+import type { DrawType } from '../engine/outsDrill';
+import { generateDecisionScenario } from '../engine/decisionDrill';
+import type { DecisionAction, DecisionScenario } from '../engine/decisionDrill';
 import { recordDrillResult } from '../persistence/drillStats';
 
-const TIME_LIMIT = 20;
-const round25 = (n: number) => Math.max(25, Math.round(n / 25) * 25);
+// A two-phase drill: first count your outs (exactly like the Draws & Outs
+// trainer — same generators, same verified out counts), THEN decide what to
+// do about it. This exists because the old version just handed you a made-up
+// "your chance: 16%" with no way to see where that number came from. Now the
+// equity you compare against the price is the exact number you just counted.
+const TIME_LIMIT = 25;
 
-interface Spot {
-  potBefore: number; // chips already in the middle (includes opponent's bet)
-  toCall: number; // amount you must call
-  winPct: number; // your rough chance to win
-  breakEven: number; // equity needed to break even, %
-  correct: 'call' | 'fold';
+const SUIT_CHARS: Record<Card['suit'], string> = { s: '♠', h: '♥', d: '♦', c: '♣' };
+const rankLabel = (r: Card['rank']) => (r === 'T' ? '10' : r);
+
+function CardFace({ c, small }: { c: Card; small?: boolean }) {
+  const red = c.suit === 'h' || c.suit === 'd';
+  return (
+    <div className={`flex ${small ? 'h-16 w-11' : 'h-20 w-14'} flex-col items-center justify-center rounded-lg border border-slate-300 bg-white shadow`}>
+      <span className={`${small ? 'text-lg' : 'text-2xl'} font-bold ${red ? 'text-rose-600' : 'text-slate-900'}`}>{rankLabel(c.rank)}</span>
+      <span className={`${small ? 'text-lg' : 'text-2xl'} ${red ? 'text-rose-600' : 'text-slate-900'}`}>{SUIT_CHARS[c.suit]}</span>
+    </div>
+  );
 }
 
-function makeSpot(): Spot {
-  const potBefore = round25(100 + Math.random() * 700);
-  const toCall = round25(potBefore * (0.25 + Math.random() * 0.75));
-  const breakEven = (toCall / (potBefore + toCall)) * 100;
-  const wantCall = Math.random() < 0.5;
-  const margin = 6 + Math.random() * 12; // keep it a clear decision, not a coin-flip
-  let winPct = Math.round(wantCall ? breakEven + margin : breakEven - margin);
-  winPct = Math.max(3, Math.min(94, winPct));
-  return { potBefore, toCall, winPct, breakEven, correct: winPct >= breakEven ? 'call' : 'fold' };
-}
+const ACTION_LABEL: Record<DecisionAction, string> = { fold: 'Fold', call: 'Call', raise: 'Raise' };
+const ACTION_TONE: Record<DecisionAction, string> = {
+  fold: 'border-rose-600 bg-rose-950/50 text-rose-300',
+  call: 'border-emerald-600 bg-emerald-950/50 text-emerald-300',
+  raise: 'border-amber-500 bg-amber-950/40 text-amber-300',
+};
+
+type Phase = 'outs' | 'decision';
 
 export function PotOddsTrainer() {
-  const [spot, setSpot] = useState<Spot>(() => makeSpot());
-  const [guess, setGuess] = useState<'call' | 'fold' | null>(null);
+  const [enabled, setEnabled] = useState<DrawType[]>([...ALL_DRAWS]);
+  const [scenario, setScenario] = useState<DecisionScenario>(() => generateDecisionScenario(ALL_DRAWS));
+  const [phase, setPhase] = useState<Phase>('outs');
+  const [outsGuess, setOutsGuess] = useState<number | null>(null);
+  const [actionGuess, setActionGuess] = useState<DecisionAction | null>(null);
   const [timed, setTimed] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   const [timeLeft, setTimeLeft] = useState(TIME_LIMIT);
@@ -33,48 +48,72 @@ export function PotOddsTrainer() {
   const timeLeftRef = useRef(timeLeft);
   timeLeftRef.current = timeLeft;
 
-  const revealed = guess != null;
-  const isCorrect = guess === spot.correct;
-  const beStr = useMemo(() => spot.breakEven.toFixed(1), [spot]);
+  const outsRevealed = outsGuess != null;
+  const decisionRevealed = actionGuess != null;
+  const s = scenario.outsScenario;
+  const outsOptionsList = outsRevealed ? [] : outsOptions(s.outs);
 
+  // Countdown only runs during the currently-active, unanswered phase.
   useEffect(() => {
-    if (!timed || revealed) return;
+    if (!timed) return;
+    const waitingOnOuts = phase === 'outs' && !outsRevealed;
+    const waitingOnDecision = phase === 'decision' && !decisionRevealed;
+    if (!waitingOnOuts && !waitingOnDecision) return;
     if (timeLeft <= 0) {
-      submit(spot.correct === 'call' ? 'fold' : 'call'); // time-out counts as wrong
+      if (waitingOnOuts) submitOuts(-1);
+      else submitAction('fold' === scenario.action ? 'call' : 'fold'); // time-out counts as wrong
       return;
     }
-    const t = setTimeout(() => setTimeLeft((s) => s - 1), 1000);
+    const t = setTimeout(() => setTimeLeft((v) => v - 1), 1000);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [timed, revealed, timeLeft]);
+  }, [timed, phase, outsRevealed, decisionRevealed, timeLeft]);
 
-  function submit(choice: 'call' | 'fold') {
-    if (revealed) return;
-    const correct = choice === spot.correct;
+  function submitOuts(choice: number) {
+    if (outsRevealed) return;
+    setOutsGuess(choice);
+    setTimeLeft(TIME_LIMIT);
+  }
+
+  function goToDecision() {
+    setPhase('decision');
+    setTimeLeft(TIME_LIMIT);
+  }
+
+  function submitAction(choice: DecisionAction) {
+    if (decisionRevealed) return;
+    const correct = choice === scenario.action;
     const speedBonus = timed ? Math.round((timeLeftRef.current / TIME_LIMIT) * 50) : 0;
     const gained = correct ? 50 + speedBonus + stats.streak * 5 : 0;
     recordDrillResult('potodds', correct);
-    setGuess(choice);
-    setStats((s) => {
-      const streak = correct ? s.streak + 1 : 0;
+    setActionGuess(choice);
+    setStats((prev) => {
+      const streak = correct ? prev.streak + 1 : 0;
       return {
-        correct: s.correct + (correct ? 1 : 0),
-        total: s.total + 1,
-        score: s.score + gained,
+        correct: prev.correct + (correct ? 1 : 0),
+        total: prev.total + 1,
+        score: prev.score + gained,
         streak,
-        best: Math.max(s.best, streak),
+        best: Math.max(prev.best, streak),
       };
     });
   }
 
   function next() {
-    setSpot(makeSpot());
-    setGuess(null);
+    setScenario(generateDecisionScenario(enabled));
+    setPhase('outs');
+    setOutsGuess(null);
+    setActionGuess(null);
     setTimeLeft(TIME_LIMIT);
+  }
+
+  function toggleType(t: DrawType) {
+    setEnabled((prev) => (prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]));
   }
 
   return (
     <div className="space-y-4">
+      {/* Scoreboard */}
       <div className="flex items-center justify-between rounded-lg border border-slate-700 bg-slate-800/60 px-4 py-2">
         <div>
           <div className="text-2xl font-extrabold text-amber-300">{stats.score}</div>
@@ -103,68 +142,166 @@ export function PotOddsTrainer() {
         </label>
       </div>
 
+      {/* Which draws to practice */}
+      <div>
+        <div className="mb-1.5 text-xs font-medium uppercase tracking-wide text-slate-400">Practice which draws?</div>
+        <div className="flex flex-wrap gap-1.5">
+          {ALL_DRAWS.map((t) => {
+            const on = enabled.includes(t);
+            return (
+              <button
+                key={t}
+                onClick={() => toggleType(t)}
+                className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
+                  on ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+                }`}
+              >
+                {DRAW_LABELS[t]}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       <div className="rounded-lg border border-slate-700 bg-slate-800/60 text-sm text-slate-300">
         <button onClick={() => setShowHelp((v) => !v)} className="flex w-full items-center justify-between px-4 py-2 text-left font-semibold text-slate-100">
-          <span>How pot odds decide it</span>
+          <span>How this drill works</span>
           <span className="text-slate-500">{showHelp ? '▲' : '▼'}</span>
         </button>
         {showHelp && (
           <ol className="ml-4 list-decimal space-y-1 px-4 pb-3 text-xs">
-            <li>Work out the price: <span className="text-slate-100">call ÷ (pot + call)</span> = the % you need to win to break even.</li>
-            <li>Compare it to your <span className="text-slate-100">chance to win</span> (equity).</li>
-            <li>If your chance ≥ the break-even %, calling makes money → <span className="text-emerald-300">call</span>. Otherwise <span className="text-rose-300">fold</span>.</li>
+            <li>First, count your <span className="text-slate-100">outs</span> on the actual cards shown, same as the Draws &amp; Outs drill.</li>
+            <li>Outs × 4 (two cards left) or × 2 (one card left) = your <span className="text-slate-100">equity</span> — no guessing, it's the number you just counted.</li>
+            <li>The price to continue is <span className="text-slate-100">call ÷ (pot + call)</span> — the break-even %.</li>
+            <li>Equity below break-even → <span className="text-rose-300">fold</span>. Equity above it with a big draw (8+ outs: open-ended, flush, or combo) → <span className="text-amber-300">raise</span> as a semi-bluff. Above it with a smaller draw (gutshot or overcards) → <span className="text-emerald-300">call</span>.</li>
           </ol>
         )}
       </div>
 
-      <div className="rounded-lg border border-slate-700 bg-emerald-950/30 p-4 text-center">
-        <div className="grid grid-cols-3 gap-2">
-          <Stat label="Pot" value={`$${spot.potBefore.toLocaleString()}`} tone="text-amber-300" />
-          <Stat label="To call" value={`$${spot.toCall.toLocaleString()}`} tone="text-rose-300" />
-          <Stat label="Your chance" value={`~${spot.winPct}%`} tone="text-emerald-300" />
+      {/* The spot: shown throughout both phases so the cards never disappear. */}
+      <div className="rounded-lg border border-slate-700 bg-emerald-950/30 p-3">
+        <div className="mb-2 text-center text-xs text-slate-400">{comeDescription(s.cardsToCome)}</div>
+        <div className="flex items-end justify-center gap-4">
+          <div className="text-center">
+            <div className="mb-1 text-[11px] uppercase tracking-wide text-emerald-300">Your hand</div>
+            <div className="flex gap-1.5">
+              {s.hero.map((c, i) => (
+                <CardFace key={i} c={c} />
+              ))}
+            </div>
+          </div>
+          <div className="text-center">
+            <div className="mb-1 text-[11px] uppercase tracking-wide text-slate-400">Board</div>
+            <div className="flex gap-1.5">
+              {s.board.map((c, i) => (
+                <CardFace key={i} c={c} small />
+              ))}
+            </div>
+          </div>
         </div>
-        {timed && !revealed && (
-          <div className={`mt-2 font-mono text-sm font-bold ${timeLeft <= 6 ? 'text-rose-400' : 'text-slate-400'}`}>{timeLeft}s</div>
+        {phase === 'decision' && (
+          <div className="mt-3 grid grid-cols-3 gap-2">
+            <Stat label="Pot" value={`$${scenario.potBefore.toLocaleString()}`} tone="text-amber-300" />
+            <Stat label="To call" value={`$${scenario.toCall.toLocaleString()}`} tone="text-rose-300" />
+            <Stat label="Your equity" value={`${scenario.equityPercent}%`} tone="text-emerald-300" />
+          </div>
+        )}
+        {timed && ((phase === 'outs' && !outsRevealed) || (phase === 'decision' && !decisionRevealed)) && (
+          <div className={`mt-2 text-center font-mono text-sm font-bold ${timeLeft <= 6 ? 'text-rose-400' : 'text-slate-400'}`}>{timeLeft}s</div>
         )}
       </div>
 
-      {!revealed ? (
+      {phase === 'outs' ? (
+        !outsRevealed ? (
+          <div>
+            <p className="mb-2 text-center text-sm text-slate-300">Step 1 — how many outs do you have?</p>
+            <div className="grid grid-cols-4 gap-2">
+              {outsOptionsList.map((n) => (
+                <button
+                  key={n}
+                  onClick={() => submitOuts(n)}
+                  className="rounded-lg bg-slate-700 px-3 py-2 text-base font-bold text-white transition-colors hover:bg-slate-600"
+                >
+                  {n}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div
+              className={`rounded-lg border p-3 text-center font-semibold ${
+                outsGuess === s.outs ? 'border-emerald-600 bg-emerald-950/50 text-emerald-300' : 'border-rose-600 bg-rose-950/50 text-rose-300'
+              }`}
+            >
+              {outsGuess === s.outs ? 'Correct!' : outsGuess === -1 ? "Time's up!" : `Not quite — you said ${outsGuess}.`}{' '}
+              <span className="text-slate-100">
+                {s.drawName}: {s.outs} outs
+              </span>
+            </div>
+            <div className="rounded-lg border border-slate-700 bg-slate-800/60 p-3">
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">How it's worked out</p>
+              <ul className="ml-4 list-disc space-y-1 text-sm text-slate-300">
+                {s.steps.map((st, i) => (
+                  <li key={i}>{st}</li>
+                ))}
+              </ul>
+              <div className="mt-3 border-t border-slate-700 pt-2 font-mono text-sm">
+                {s.outs} outs × {s.cardsToCome === 2 ? 4 : 2} ={' '}
+                <span className="text-emerald-300">≈ {scenario.equityPercent}% equity</span>
+              </div>
+            </div>
+            <button onClick={goToDecision} className="w-full rounded-lg bg-emerald-600 py-2 font-semibold text-white transition-colors hover:bg-emerald-500">
+              Step 2: what do you do? →
+            </button>
+          </div>
+        )
+      ) : !decisionRevealed ? (
         <div>
-          <p className="mb-2 text-center text-sm text-slate-300">Call or fold?</p>
-          <div className="grid grid-cols-2 gap-2">
-            <button onClick={() => submit('call')} className="rounded-lg bg-emerald-600 py-3 text-base font-bold text-white transition-colors hover:bg-emerald-500">
+          <p className="mb-2 text-center text-sm text-slate-300">
+            Step 2 — you have {scenario.equityPercent}% equity. Fold, call, or raise?
+          </p>
+          <div className="grid grid-cols-3 gap-2">
+            <button onClick={() => submitAction('fold')} className="rounded-lg bg-rose-700 py-3 text-base font-bold text-white transition-colors hover:bg-rose-600">
+              Fold
+            </button>
+            <button onClick={() => submitAction('call')} className="rounded-lg bg-emerald-600 py-3 text-base font-bold text-white transition-colors hover:bg-emerald-500">
               Call
             </button>
-            <button onClick={() => submit('fold')} className="rounded-lg bg-rose-700 py-3 text-base font-bold text-white transition-colors hover:bg-rose-600">
-              Fold
+            <button onClick={() => submitAction('raise')} className="rounded-lg bg-amber-600 py-3 text-base font-bold text-white transition-colors hover:bg-amber-500">
+              Raise
             </button>
           </div>
         </div>
       ) : (
         <div className="space-y-4">
-          <div
-            className={`rounded-lg border p-3 text-center font-semibold ${
-              isCorrect ? 'border-emerald-600 bg-emerald-950/50 text-emerald-300' : 'border-rose-600 bg-rose-950/50 text-rose-300'
-            }`}
-          >
-            {isCorrect ? `Correct! +${50 + (timed ? Math.round((timeLeftRef.current / TIME_LIMIT) * 50) : 0) + (stats.streak - 1) * 5} pts` : 'Not quite.'}{' '}
-            <span className="text-slate-100">You should {spot.correct}.</span>
+          <div className={`rounded-lg border p-3 text-center font-semibold ${actionGuess === scenario.action ? ACTION_TONE[scenario.action] : 'border-rose-600 bg-rose-950/50 text-rose-300'}`}>
+            {actionGuess === scenario.action
+              ? `Correct! +${50 + (timed ? Math.round((timeLeftRef.current / TIME_LIMIT) * 50) : 0) + (stats.streak - 1) * 5} pts`
+              : 'Not quite.'}{' '}
+            <span className="text-slate-100">You should {ACTION_LABEL[scenario.action].toLowerCase()}.</span>
           </div>
 
           <div className="rounded-lg border border-slate-700 bg-slate-800/60 p-3 text-sm">
             <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">How it's worked out</p>
             <p className="font-mono text-slate-300">
-              {spot.toCall} ÷ ({spot.potBefore} + {spot.toCall}) = <span className="text-amber-300">{beStr}% break-even</span>
+              {scenario.toCall} ÷ ({scenario.potBefore} + {scenario.toCall}) ={' '}
+              <span className="text-amber-300">{scenario.breakEvenPercent.toFixed(1)}% break-even</span>
             </p>
             <p className="mt-2 text-slate-300">
-              You win about <span className="text-emerald-300">{spot.winPct}%</span> of the time, which is{' '}
-              <span className="text-slate-100">{spot.winPct >= spot.breakEven ? 'more' : 'less'}</span> than the{' '}
-              {beStr}% you need — so calling {spot.winPct >= spot.breakEven ? 'makes money' : 'loses money'} over the long run.{' '}
-              <span className="font-semibold">{spot.correct === 'call' ? 'Call.' : 'Fold.'}</span>
+              Your {scenario.equityPercent}% equity ({s.outs} outs) is{' '}
+              <span className="text-slate-100">{scenario.equityPercent >= scenario.breakEvenPercent ? 'more' : 'less'}</span> than the{' '}
+              {scenario.breakEvenPercent.toFixed(1)}% you need, so continuing{' '}
+              {scenario.equityPercent >= scenario.breakEvenPercent ? 'makes money' : 'loses money'} over the long run.
             </p>
-            <p className="mt-2 text-xs text-slate-500">
-              In odds terms that's about {(spot.potBefore / spot.toCall).toFixed(1)}-to-1.
-            </p>
+            {scenario.action !== 'fold' && (
+              <p className="mt-2 text-slate-300">
+                {scenario.raiseEligible
+                  ? `With a big draw (${s.outs} outs) that's ahead of the price, raising as a semi-bluff often beats just calling — you might win the pot outright if they fold, and you still have your outs if they call.`
+                  : `Your draw is live and worth continuing, but with only ${s.outs} outs there usually isn't enough extra value in raising — just call and see the next card.`}
+              </p>
+            )}
+            <p className="mt-2 font-semibold text-slate-100">{ACTION_LABEL[scenario.action]}.</p>
           </div>
 
           <button onClick={next} className="w-full rounded-lg bg-emerald-600 py-2 font-semibold text-white transition-colors hover:bg-emerald-500">
