@@ -353,10 +353,13 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
         paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))',
       }}
     >
-      {/* Top bar — premium glass strip; compact row that scrolls if it overflows. */}
-      <div className="relative mb-2 flex items-center justify-between gap-2 overflow-hidden rounded-xl border border-amber-500/15 bg-gradient-to-b from-slate-900/90 to-slate-950/80 px-2.5 py-1.5 text-sm text-slate-300 shadow-lg ring-1 ring-white/5">
+      {/* Top bar — premium glass strip. Wraps onto a second line instead of
+          overflowing when the row's buttons (with their on/off text labels)
+          don't fit one line — that's structurally immune to producing a
+          horizontal scrollbar at any viewport width, unlike a fixed-width row. */}
+      <div className="relative mb-2 flex flex-wrap items-center justify-between gap-x-2 gap-y-1.5 rounded-xl border border-amber-500/15 bg-gradient-to-b from-slate-900/90 to-slate-950/80 px-2.5 py-1.5 text-sm text-slate-300 shadow-lg ring-1 ring-white/5">
         <div className="pointer-events-none absolute inset-x-6 top-0 h-px bg-gradient-to-r from-transparent via-amber-400/50 to-transparent" />
-        <div className="flex min-w-0 items-center gap-2 overflow-x-auto whitespace-nowrap">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
           <button
             onClick={onExit}
             className="flex shrink-0 items-center gap-1 rounded-lg bg-slate-800 px-2 py-1 text-xs font-semibold text-slate-300 ring-1 ring-slate-600 hover:bg-slate-700 hover:text-slate-100 sm:text-sm"
@@ -378,7 +381,7 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
             {Number.isFinite(msLeftInLevel) && ` · ${formatClock(msLeftInLevel)}`}
           </span>
         </div>
-        <div className="flex shrink-0 items-center gap-1.5">
+        <div className="flex flex-wrap items-center gap-1.5">
           <span className="flex items-center gap-1.5 rounded-lg bg-emerald-950/70 px-3 py-1 font-mono text-base font-extrabold text-emerald-300 ring-1 ring-emerald-600/40 sm:text-lg">
             💰 ${human.stack.toLocaleString()}
             {human.stack > setup.startingStack && (

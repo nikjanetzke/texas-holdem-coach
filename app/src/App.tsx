@@ -17,6 +17,12 @@ function App() {
 
   const exitToSetup = () => {
     clearSession(SETUP_STORAGE_KEY);
+    // Also clear the in-game progress session (stacks, hand number, dealer seat).
+    // Without this, starting the same scenario again (its AI seat ids are
+    // deterministic, e.g. "ai-1") reused the previous game's leftover session —
+    // including a busted 0 stack — so the new game silently restored a dead
+    // table and instantly showed the win/game-over screen with no hands played.
+    clearSession();
     setSetup(null);
   };
 

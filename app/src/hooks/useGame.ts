@@ -99,13 +99,26 @@ function sessionKey(setup: GameSetup): string {
   return setup.seats.map((s) => s.id).join(',');
 }
 
+// Only restore a saved session if it matches the current set of seats AND it
+// still has at least 2 solvent players. Without the second check, a finished
+// game's leftover session (e.g. the human busted to 0) could be silently
+// reused when the same setup is started again — since scenarios use
+// deterministic seat ids (e.g. "ai-1"), replaying a scenario after busting
+// would restore the dead table and the game would end instantly with no
+// hands played, looking like an immediate/bogus win or loss.
+// Exported so this restore rule can be unit-tested without mounting the hook.
+export function pickRestorableSession(
+  saved: (SavedSession & { seatKey: string }) | null,
+  setup: GameSetup,
+): (SavedSession & { seatKey: string }) | null {
+  if (!saved || saved.seatKey !== sessionKey(setup)) return null;
+  const activeCount = setup.seats.filter((s) => (saved.stacks[s.id] ?? 0) > 0).length;
+  if (activeCount < 2) return null;
+  return saved;
+}
+
 export function useGame(setup: GameSetup) {
-  // Only restore a saved session if it matches the current set of seats.
-  const initialSaved = (() => {
-    const saved = loadSession<SavedSession & { seatKey: string }>();
-    if (saved && saved.seatKey === sessionKey(setup)) return saved;
-    return null;
-  })();
+  const initialSaved = pickRestorableSession(loadSession<SavedSession & { seatKey: string }>(), setup);
 
   const [stacks, setStacks] = useState<Record<string, number>>(
     () => initialSaved?.stacks ?? Object.fromEntries(setup.seats.map((s) => [s.id, s.stack ?? setup.startingStack])),

@@ -22,12 +22,25 @@ const POOLS: Record<string, AIProfile[]> = {
 };
 
 let seatCounter = 0;
+// Tracks how many characters we've already drawn from each archetype pool in the
+// current scenario build, so repeated archetypes never land on the same face.
+// (Indexing by the global seatCounter instead used to collide — e.g. the 1st and
+// 4th "callingStation" seat could both hash to the same 3-person pool slot,
+// literally seating the same character twice at one table.)
+let poolIndexByArchetype: Record<string, number> = {};
+
+function resetScenarioCounters(): void {
+  seatCounter = 0;
+  poolIndexByArchetype = {};
+}
+
 function ai(profile: AIProfile, stack: number): SeatConfig {
   seatCounter++;
-  // Pick a character of the matching style; cycle through the pool so repeated
-  // archetypes in one scenario get different faces.
-  const pool = POOLS[profile.id] ?? CHARACTERS;
-  const character = pool[seatCounter % pool.length];
+  const key = profile.id;
+  const pool = POOLS[key] ?? CHARACTERS;
+  const idx = (poolIndexByArchetype[key] ?? 0) % pool.length;
+  poolIndexByArchetype[key] = idx + 1;
+  const character = pool[idx];
   return { id: `ai-${seatCounter}`, name: character.shortName, isHuman: false, profile: character, stack };
 }
 function human(stack: number): SeatConfig {
@@ -44,7 +57,7 @@ export const SCENARIOS: Scenario[] = [
     name: 'Short-stack heads-up',
     description: 'You hold ~12 big blinds heads-up against an aggressive opponent. Practice shove-or-fold pressure.',
     build: () => {
-      seatCounter = 0;
+      resetScenarioCounters();
       return setup([human(600), ai(AI_ARCHETYPES.looseAggressive, 2400)], 'turbo', 'Short-stack heads-up');
     },
   },
@@ -53,7 +66,7 @@ export const SCENARIOS: Scenario[] = [
     name: 'Big-stack bully (6-max)',
     description: 'You sit deep with a commanding stack while everyone else is short. Practice applying pressure.',
     build: () => {
-      seatCounter = 0;
+      resetScenarioCounters();
       return setup(
         [
           human(4000),
@@ -73,7 +86,7 @@ export const SCENARIOS: Scenario[] = [
     name: 'Even 6-max grind',
     description: 'A balanced 6-handed table with mixed opponent styles and even stacks. General practice.',
     build: () => {
-      seatCounter = 0;
+      resetScenarioCounters();
       return setup(
         [
           human(2000),
@@ -93,7 +106,7 @@ export const SCENARIOS: Scenario[] = [
     name: 'Card-dead day',
     description: 'You keep being dealt weak starting hands. Practice patience and disciplined folding.',
     build: () => {
-      seatCounter = 0;
+      resetScenarioCounters();
       return setup(
         [
           human(2000),
@@ -114,7 +127,7 @@ export const SCENARIOS: Scenario[] = [
     name: 'Running hot',
     description: 'You keep picking up premium hands. Practice extracting maximum value without scaring opponents off.',
     build: () => {
-      seatCounter = 0;
+      resetScenarioCounters();
       return setup(
         [
           human(2000),
