@@ -357,8 +357,12 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
       <div className="relative mb-2 flex items-center justify-between gap-2 overflow-hidden rounded-xl border border-amber-500/15 bg-gradient-to-b from-slate-900/90 to-slate-950/80 px-2.5 py-1.5 text-sm text-slate-300 shadow-lg ring-1 ring-white/5">
         <div className="pointer-events-none absolute inset-x-6 top-0 h-px bg-gradient-to-r from-transparent via-amber-400/50 to-transparent" />
         <div className="flex min-w-0 items-center gap-2 overflow-x-auto whitespace-nowrap">
-          <button onClick={onExit} className="shrink-0 rounded px-1.5 py-1 text-slate-400 hover:bg-slate-800 hover:text-slate-100">
-            ←
+          <button
+            onClick={onExit}
+            className="flex shrink-0 items-center gap-1 rounded-lg bg-slate-800 px-2 py-1 text-xs font-semibold text-slate-300 ring-1 ring-slate-600 hover:bg-slate-700 hover:text-slate-100 sm:text-sm"
+            title="Leave this game and return to the menu"
+          >
+            ← Exit
           </button>
           <span className="shrink-0 font-bold text-amber-200">#{handNumber}</span>
           {setup.scenarioName && (
