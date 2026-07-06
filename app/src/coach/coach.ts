@@ -1,5 +1,6 @@
 import type { Card } from '../engine/deck';
 import { computePotOdds, estimateEquity } from '../engine/equity';
+import { chenScore } from '../engine/preflop';
 import type { ActionType } from '../engine/betting';
 
 export type Position = 'Early' | 'Middle' | 'Late' | 'Small Blind' | 'Big Blind';
@@ -70,10 +71,35 @@ export function generateAdvice(input: CoachAdviceInput): CoachAdvice {
 
   reasoning.push(`Your hand is roughly ${handStrengthLabel.toLowerCase()} here, with an estimated ${(equity * 100).toFixed(0)}% chance to win against ${input.numOpponents} opponent${input.numOpponents === 1 ? '' : 's'}.`);
 
-  if (input.position === 'Early') {
-    reasoning.push('You are in early position, so many players can still act after you — that favors a tighter range.');
+  // Position teaching, in the same green/amber vocabulary as the scenario
+  // range charts. Only added preflop and only when the seat actually changes
+  // how the starting hand should be viewed — one line, not a lecture.
+  const preflop = input.communityCards.length === 0;
+  if (preflop) {
+    const chen = chenScore(input.holeCards);
+    if (chen >= 8) {
+      reasoning.push('This is a strong starting hand from any seat — position matters least with premium cards.');
+    } else if (input.position === 'Early') {
+      reasoning.push(
+        chen >= 6
+          ? `A playable hand, but you're first to act with players still behind you — on the range charts this is an amber hand: fine from a late seat, marginal from here.`
+          : `You're in an early seat with many players still to act after you — weak and marginal hands lose the most from here, so folding cheap is usually right.`,
+      );
+    } else if (input.position === 'Late') {
+      reasoning.push(
+        chen >= 6
+          ? 'You act near-last this hand — exactly the seat where a hand like this goes up in value. Amber-chart hands become playable here.'
+          : 'Even from a good late seat, a weak starting hand is still weak — position improves marginal hands, it does not rescue trash.',
+      );
+    } else if (input.position === 'Small Blind' || input.position === 'Big Blind') {
+      reasoning.push(
+        'You already have chips in from the blind, but remember: after the flop you act first every round. Being "priced in" tempts people into playing too many hands from here.',
+      );
+    }
+  } else if (input.position === 'Early') {
+    reasoning.push('You act before most players this round, so they see your move first — that favors a tighter, more careful line.');
   } else if (input.position === 'Late') {
-    reasoning.push('You are in late position, which lets you see how others act before committing more chips.');
+    reasoning.push('You act after most players this round — you get to see what they do before committing more chips.');
   }
 
   if (facingBet) {

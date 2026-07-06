@@ -14,6 +14,16 @@ import type { CoachMath } from '../coach/coach';
 import type { Card } from '../engine/deck';
 import { SCENARIO_STRATEGIES } from '../scenarios/strategy';
 import { StrategyGuide } from './StrategyGuide';
+import { describeHumanPosition } from '../coach/position';
+
+// Colour does the early teaching: red = play tight, green = you have the edge,
+// blue = blinds (already paid in). The poker names come later, in the explainer.
+const POSITION_TONES: Record<'red' | 'amber' | 'green' | 'blue', string> = {
+  red: 'bg-rose-950/70 text-rose-300 ring-rose-600/50 hover:bg-rose-900/70',
+  amber: 'bg-amber-950/70 text-amber-300 ring-amber-600/50 hover:bg-amber-900/70',
+  green: 'bg-emerald-950/70 text-emerald-300 ring-emerald-600/50 hover:bg-emerald-900/70',
+  blue: 'bg-sky-950/70 text-sky-300 ring-sky-600/50 hover:bg-sky-900/70',
+};
 
 const ACTION_SOUND: Record<ActionType, SfxName> = {
   fold: 'fold',
@@ -72,6 +82,7 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
   const [chatOpen, setChatOpen] = useState(false);
   const [chatText, setChatText] = useState('');
   const [strategyOpen, setStrategyOpen] = useState(false);
+  const [positionOpen, setPositionOpen] = useState(false);
   const scenarioStrategy = setup.scenarioId ? SCENARIO_STRATEGIES[setup.scenarioId] : undefined;
   const prevSecLeftRef = useRef<number | null>(null);
   const spokenTurnRef = useRef<number>(-1);
@@ -341,6 +352,9 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
 
   const isHandOver = engine.isHandOver();
   const human = engine.players.find((p) => p.id === 'human')!;
+  // Part of the coaching UI: computed here but only ever rendered when
+  // coachEnabled is on (badge, explainer modal and all).
+  const positionInfo = coachEnabled ? describeHumanPosition(engine) : null;
   lastHumanStackRef.current = human.stack;
   const leaks = leakTracker.topLeaks();
   const payouts = engine.showdownResult?.payouts ?? {};
@@ -626,7 +640,7 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
             validActions ? 'border-emerald-600/50 ring-1 ring-emerald-500/30' : 'border-slate-700'
           }`}
         >
-          <div className="mb-2 flex items-center justify-between">
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
             <span className={`text-sm font-bold ${validActions ? 'text-emerald-300' : 'text-slate-400'}`}>
               {validActions
                 ? '● Your turn'
@@ -634,11 +648,22 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
                   ? `○ Pre-press queued: ${queuedAction} — will play on your turn`
                   : '○ Waiting — tap to pre-press'}
             </span>
-            {validActions && actionSecondsLeft != null && (
-              <span className={`font-mono text-sm font-bold ${actionSecondsLeft <= 5 ? 'text-rose-400' : 'text-slate-300'}`}>
-                {actionSecondsLeft}s
-              </span>
-            )}
+            <span className="flex items-center gap-2">
+              {positionInfo && (
+                <button
+                  onClick={() => setPositionOpen(true)}
+                  className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 transition-colors ${POSITION_TONES[positionInfo.tone]}`}
+                  title={positionInfo.tip}
+                >
+                  📍 {positionInfo.plain}
+                </button>
+              )}
+              {validActions && actionSecondsLeft != null && (
+                <span className={`font-mono text-sm font-bold ${actionSecondsLeft <= 5 ? 'text-rose-400' : 'text-slate-300'}`}>
+                  {actionSecondsLeft}s
+                </span>
+              )}
+            </span>
           </div>
           {!validActions ? (
             // Not your turn yet: Fold/Check/Call can be *pre-pressed* — the action
@@ -790,6 +815,41 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
       {/* Re-openable scenario strategy guide (📖 in the top bar). */}
       {strategyOpen && scenarioStrategy && (
         <StrategyGuide strategy={scenarioStrategy} onClose={() => setStrategyOpen(false)} closeLabel="Back to the table" />
+      )}
+
+      {/* Position explainer — coaching UI, so it can only open while the coach
+          is on (the badge that opens it is itself gated on coachEnabled). */}
+      {coachEnabled && positionOpen && positionInfo && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={() => setPositionOpen(false)}>
+          <div
+            className="w-full max-w-md rounded-2xl border border-slate-700 bg-gradient-to-b from-slate-900 to-slate-950 p-5 shadow-2xl ring-1 ring-white/5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-1 flex items-start justify-between gap-3">
+              <h2 className="text-lg font-bold text-slate-100">📍 Your seat this hand</h2>
+              <button onClick={() => setPositionOpen(false)} className="rounded px-2 py-1 text-slate-400 hover:bg-slate-800 hover:text-slate-100">
+                ✕
+              </button>
+            </div>
+            <div className={`mb-3 inline-block rounded-full px-3 py-1 text-sm font-semibold ring-1 ${POSITION_TONES[positionInfo.tone]}`}>
+              {positionInfo.plain}
+            </div>
+            <div className="space-y-2.5 text-sm leading-relaxed text-slate-300">
+              {positionInfo.explainer.map((p, i) => (
+                <p key={i}>{p}</p>
+              ))}
+            </div>
+            <p className="mt-3 border-t border-slate-800 pt-2 text-xs text-slate-500">
+              Poker name for this seat: <span className="text-slate-300">{positionInfo.pokerName}</span>
+            </p>
+            <button
+              onClick={() => setPositionOpen(false)}
+              className="mt-4 w-full rounded-xl bg-gradient-to-b from-emerald-500 to-emerald-700 py-2.5 font-bold text-white shadow-lg ring-1 ring-emerald-400/40 hover:from-emerald-400 hover:to-emerald-600"
+            >
+              Back to the table
+            </button>
+          </div>
+        </div>
       )}
 
       {/* Hand history & export live in a modal (opened from the ⋯ button) so they

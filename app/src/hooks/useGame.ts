@@ -213,7 +213,15 @@ export function useGame(setup: GameSetup) {
     const valid = engine.getValidActions('human');
     const numOpponents = engine.players.filter((p) => !p.folded && !p.sittingOut && p.id !== 'human').length;
     const seatIndexInOrder = engine.actingOrder.findIndex((seatIdx) => engine.players[seatIdx].id === 'human');
-    const position = classifyPosition(seatIndexInOrder, engine.actingOrder.length, false, false);
+    // Pass the real blind flags — these were hardcoded to false, so the coach
+    // never knew the human was in the blinds and skipped its blind-specific
+    // advice ("you'll act first after the flop...") entirely.
+    const position = classifyPosition(
+      seatIndexInOrder,
+      engine.actingOrder.length,
+      engine.smallBlindId === 'human',
+      engine.bigBlindId === 'human',
+    );
     const result = generateAdvice({
       holeCards: player.holeCards,
       communityCards: engine.communityCards,
