@@ -3,6 +3,9 @@ import type { GameSetup } from '../hooks/useGame';
 import { buildDefaultSeats } from '../hooks/useGame';
 import { BLIND_SCHEDULES, DEFAULT_SCHEDULE_ID } from '../engine/blinds';
 import { SCENARIOS } from '../scenarios/scenarios';
+import type { Scenario } from '../scenarios/scenarios';
+import { SCENARIO_STRATEGIES } from '../scenarios/strategy';
+import { StrategyGuide } from './StrategyGuide';
 import { TrainingHub } from './TrainingHub';
 
 export function SetupScreen({ onStart }: { onStart: (setup: GameSetup) => void }) {
@@ -18,6 +21,8 @@ export function SetupScreen({ onStart }: { onStart: (setup: GameSetup) => void }
   const [coachDefault, setCoachDefault] = useState(false);
   const [speechDefault, setSpeechDefault] = useState(false);
   const [autoAdvanceDefault, setAutoAdvanceDefault] = useState(true);
+  // A picked scenario shows its strategy primer first; confirming starts the game.
+  const [pendingScenario, setPendingScenario] = useState<Scenario | null>(null);
 
   // Landing splash: the full Poker IQ hero with a single Start button. Clicking
   // through reveals the game menu (quick game / scenario / training).
@@ -91,7 +96,7 @@ export function SetupScreen({ onStart }: { onStart: (setup: GameSetup) => void }
               {SCENARIOS.map((s) => (
                 <button
                   key={s.id}
-                  onClick={() => onStart(s.build())}
+                  onClick={() => (SCENARIO_STRATEGIES[s.id] ? setPendingScenario(s) : onStart(s.build()))}
                   className="group relative flex w-full items-center gap-3 overflow-hidden rounded-xl border border-slate-700/70 bg-slate-800/50 px-4 py-3 text-left transition-all hover:border-emerald-500/70 hover:bg-slate-800"
                 >
                   <span className="absolute inset-y-0 left-0 w-1 bg-gradient-to-b from-emerald-400 to-emerald-600 opacity-0 transition-opacity group-hover:opacity-100" />
@@ -124,6 +129,21 @@ export function SetupScreen({ onStart }: { onStart: (setup: GameSetup) => void }
           )}
         </div>
       </div>
+
+      {/* Strategy primer shown before a scenario starts — teaches how this
+          specific spot changes which hands to play, in novice-friendly terms. */}
+      {pendingScenario && SCENARIO_STRATEGIES[pendingScenario.id] && (
+        <StrategyGuide
+          strategy={SCENARIO_STRATEGIES[pendingScenario.id]}
+          closeLabel="♠ Got it — deal me in"
+          onClose={() => setPendingScenario(null)}
+          onConfirm={() => {
+            const scenario = pendingScenario;
+            setPendingScenario(null);
+            onStart(scenario.build());
+          }}
+        />
+      )}
     </div>
   );
 }

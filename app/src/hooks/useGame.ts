@@ -28,6 +28,7 @@ export interface GameSetup {
   scheduleId: string;
   cardLuck?: LuckBand; // bias the human's starting hands (scenarios)
   scenarioName?: string;
+  scenarioId?: string; // keys the in-game strategy guide (📖) to the right scenario
   /** Seconds the human has to act before auto-folding (or auto-checking if free). Undefined/0 = no timer. */
   actionTimerSeconds?: number;
   /** Starting preferences chosen on the setup screen. Defaults: coach off, speech off, auto-advance on. */

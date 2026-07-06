@@ -12,6 +12,8 @@ import { setSpeechEnabled, speak, speechSupported } from '../sound/speech';
 import { chenScore } from '../engine/preflop';
 import type { CoachMath } from '../coach/coach';
 import type { Card } from '../engine/deck';
+import { SCENARIO_STRATEGIES } from '../scenarios/strategy';
+import { StrategyGuide } from './StrategyGuide';
 
 const ACTION_SOUND: Record<ActionType, SfxName> = {
   fold: 'fold',
@@ -69,6 +71,8 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
   const [winGifFailed, setWinGifFailed] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
   const [chatText, setChatText] = useState('');
+  const [strategyOpen, setStrategyOpen] = useState(false);
+  const scenarioStrategy = setup.scenarioId ? SCENARIO_STRATEGIES[setup.scenarioId] : undefined;
   const prevSecLeftRef = useRef<number | null>(null);
   const spokenTurnRef = useRef<number>(-1);
   const feltObserverRef = useRef<ResizeObserver | null>(null);
@@ -368,9 +372,18 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
             ← Exit
           </button>
           <span className="shrink-0 font-bold text-amber-200">#{handNumber}</span>
-          {setup.scenarioName && (
-            <span className="shrink-0 rounded-full bg-purple-900/60 px-2 py-0.5 text-xs text-purple-200">{setup.scenarioName}</span>
-          )}
+          {setup.scenarioName &&
+            (scenarioStrategy ? (
+              <button
+                onClick={() => setStrategyOpen(true)}
+                className="shrink-0 rounded-full bg-purple-900/60 px-2 py-0.5 text-xs text-purple-200 ring-1 ring-purple-500/40 transition-colors hover:bg-purple-800/70"
+                title="Re-read how to play this scenario"
+              >
+                📖 {setup.scenarioName}
+              </button>
+            ) : (
+              <span className="shrink-0 rounded-full bg-purple-900/60 px-2 py-0.5 text-xs text-purple-200">{setup.scenarioName}</span>
+            ))}
           <span className="shrink-0 rounded-full bg-slate-800 px-2 py-0.5 text-xs capitalize text-emerald-300">{engine.street}</span>
           <span
             className="shrink-0 rounded-full bg-slate-800 px-2 py-0.5 text-xs text-amber-200"
@@ -773,6 +786,11 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
 
         </div>
       </div>
+
+      {/* Re-openable scenario strategy guide (📖 in the top bar). */}
+      {strategyOpen && scenarioStrategy && (
+        <StrategyGuide strategy={scenarioStrategy} onClose={() => setStrategyOpen(false)} closeLabel="Back to the table" />
+      )}
 
       {/* Hand history & export live in a modal (opened from the ⋯ button) so they
           don't take up game screen space — they're only needed for review/export. */}

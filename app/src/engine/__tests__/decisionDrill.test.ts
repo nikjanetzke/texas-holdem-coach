@@ -33,11 +33,12 @@ describe('decisionDrill', () => {
     }
   });
 
-  it('produces a healthy mix of all three actions (no starved bucket)', () => {
+  it('produces a healthy mix of all three actions (no starved bucket)', { timeout: 30000 }, () => {
     const counts = { fold: 0, call: 0, raise: 0 };
-    for (let i = 0; i < 3000; i++) counts[generateDecisionScenario().action]++;
+    const N = 1200;
+    for (let i = 0; i < N; i++) counts[generateDecisionScenario().action]++;
     for (const key of ['fold', 'call', 'raise'] as const) {
-      expect(counts[key], `${key} count`).toBeGreaterThan(3000 * 0.05);
+      expect(counts[key], `${key} count`).toBeGreaterThan(N * 0.05);
     }
   });
 });

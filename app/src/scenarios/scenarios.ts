@@ -47,8 +47,8 @@ function human(stack: number): SeatConfig {
   return { id: 'human', name: 'You', isHuman: true, stack, portrait: PLAYER_AVATAR };
 }
 
-function setup(seats: SeatConfig[], scheduleId: string, name: string, cardLuck?: LuckBand): GameSetup {
-  return { seats, startingStack: 1000, scheduleId, cardLuck, scenarioName: name };
+function setup(seats: SeatConfig[], scheduleId: string, name: string, id: string, cardLuck?: LuckBand): GameSetup {
+  return { seats, startingStack: 1000, scheduleId, cardLuck, scenarioName: name, scenarioId: id };
 }
 
 export const SCENARIOS: Scenario[] = [
@@ -58,7 +58,7 @@ export const SCENARIOS: Scenario[] = [
     description: 'You hold ~12 big blinds heads-up against an aggressive opponent. Practice shove-or-fold pressure.',
     build: () => {
       resetScenarioCounters();
-      return setup([human(600), ai(AI_ARCHETYPES.looseAggressive, 2400)], 'turbo', 'Short-stack heads-up');
+      return setup([human(600), ai(AI_ARCHETYPES.looseAggressive, 2400)], 'turbo', 'Short-stack heads-up', 'short-stack-hu');
     },
   },
   {
@@ -78,6 +78,7 @@ export const SCENARIOS: Scenario[] = [
         ],
         'standard',
         'Big-stack bully (6-max)',
+        'big-stack-bully',
       );
     },
   },
@@ -98,6 +99,7 @@ export const SCENARIOS: Scenario[] = [
         ],
         'standard',
         'Even 6-max grind',
+        'medium-6max',
       );
     },
   },
@@ -118,6 +120,7 @@ export const SCENARIOS: Scenario[] = [
         ],
         'standard',
         'Card-dead day',
+        'card-dead',
         'cold',
       );
     },
@@ -139,6 +142,7 @@ export const SCENARIOS: Scenario[] = [
         ],
         'standard',
         'Running hot',
+        'running-hot',
         'hot',
       );
     },
