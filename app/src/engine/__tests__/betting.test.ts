@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyAction, computeSidePots } from '../betting';
+import { applyAction, computeSidePots, isBettingRoundComplete } from '../betting';
 import type { PlayerBetState } from '../betting';
 
 describe('computeSidePots', () => {
@@ -46,6 +46,51 @@ describe('computeSidePots', () => {
       { amount: 60, eligiblePlayerIds: ['b', 'c', 'd'], payerIds: ['b', 'c', 'd'] },
       { amount: 60, eligiblePlayerIds: ['c', 'd'], payerIds: ['c', 'd'] },
     ]);
+  });
+});
+
+describe('isBettingRoundComplete', () => {
+  // Regression test for a real bug: a lone non-folded, non-all-in player who
+  // hasn't matched the current bet was treated as "nothing left to do" just
+  // because they were the only one left standing (everyone else had folded
+  // or gone all-in). That let an all-in raise go completely uncontested
+  // straight to showdown — the other player never got to call, raise, or
+  // fold it, so they were neither credited for a win nor debited for a loss.
+  // Reported as "pot not awarded on an all-in win" and "stack didn't
+  // decrease enough on an all-in loss".
+  it('is NOT complete when the sole remaining player has not matched the current bet', () => {
+    const players: PlayerBetState[] = [
+      { id: 'a', stack: 0, streetContributed: 100, totalContributed: 100, folded: false, allIn: true },
+      { id: 'b', stack: 50, streetContributed: 10, totalContributed: 10, folded: false, allIn: false },
+    ];
+    expect(isBettingRoundComplete(players, 'a', new Set(['a']), 100)).toBe(false);
+  });
+
+  it('IS complete once that lone player has matched the bet and acted', () => {
+    const players: PlayerBetState[] = [
+      { id: 'a', stack: 0, streetContributed: 100, totalContributed: 100, folded: false, allIn: true },
+      { id: 'b', stack: 0, streetContributed: 100, totalContributed: 100, folded: false, allIn: true },
+    ];
+    // Both are now all-in — no one live and non-all-in remains at all.
+    expect(isBettingRoundComplete(players, 'a', new Set(['a', 'b']), 100)).toBe(true);
+  });
+
+  it('is complete when everyone still live has matched and acted', () => {
+    const players: PlayerBetState[] = [
+      { id: 'a', stack: 500, streetContributed: 100, totalContributed: 100, folded: false, allIn: false },
+      { id: 'b', stack: 500, streetContributed: 100, totalContributed: 100, folded: false, allIn: false },
+    ];
+    expect(isBettingRoundComplete(players, 'a', new Set(['a', 'b']), 100)).toBe(true);
+  });
+
+  it('is not complete if the last aggressor has not had their raise responded to', () => {
+    const players: PlayerBetState[] = [
+      { id: 'a', stack: 500, streetContributed: 100, totalContributed: 100, folded: false, allIn: false },
+    ];
+    // 'a' raised (is the last aggressor) but hasn't been given the chance to
+    // act again after their own raise reopened the action — actedPlayerIds
+    // doesn't include them yet.
+    expect(isBettingRoundComplete(players, 'a', new Set(), 100)).toBe(false);
   });
 });
 

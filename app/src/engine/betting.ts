@@ -168,11 +168,19 @@ export function isBettingRoundComplete(
   players: PlayerBetState[],
   lastAggressorId: string | null,
   actedPlayerIds: Set<string>,
+  currentBet: number,
 ): boolean {
   const live = players.filter((p) => !p.folded && !p.allIn);
-  if (live.length <= 1) return true;
+  // Only a genuine "nobody left who could possibly act" case (everyone else
+  // folded or is all-in) short-circuits here. `live.length === 1` used to
+  // take this same shortcut, but that's wrong: a single remaining player who
+  // hasn't matched the current bet still needs to call, raise, or fold it —
+  // skipping that let an all-in raise go uncontested straight to showdown,
+  // crediting/debiting nobody for the raise the other player never got to
+  // respond to (the reported "pot not awarded" / "stack didn't decrease
+  // enough on an all-in" bugs).
+  if (live.length === 0) return true;
 
-  const currentBet = Math.max(...players.filter((p) => !p.folded).map((p) => p.streetContributed));
   const allMatched = live.every((p) => p.streetContributed === currentBet);
   const allActed = live.every((p) => actedPlayerIds.has(p.id));
 

@@ -280,7 +280,8 @@ export class HandEngine {
       stillToAct.map((p) => ({ id: p.id, stack: p.stack, streetContributed: p.streetContributed, totalContributed: p.totalContributed, folded: p.folded, allIn: p.allIn })),
       this.lastAggressorId,
       this.actedPlayerIds,
-    ) || stillToAct.length === 0;
+      this.currentBet,
+    );
 
     if (roundComplete) {
       this.moveToNextStreet();

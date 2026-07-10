@@ -194,4 +194,47 @@ describe('HandEngine', () => {
     const totalChips = engine.players.reduce((sum, p) => sum + p.stack, 0);
     expect(totalChips).toBe(3000); // no chips created or destroyed
   });
+
+  // Regression test for a real bug: after one player shoves all-in, the
+  // other player (who has NOT matched the bet, is not folded, and is not
+  // all-in) was skipped entirely — the engine went straight to showdown
+  // without ever giving them the chance to call, re-raise (all-in for
+  // less), or fold. Reported as "pot not awarded on an all-in win" and
+  // "stack didn't decrease enough on an all-in loss" — because the second
+  // player's money was never actually put at risk despite the hand playing
+  // out as if it had been.
+  it('gives the second player a real chance to respond to an all-in raise', () => {
+    const engine = new HandEngine({
+      players: [
+        { id: 'a', name: 'A', stack: 867 },
+        { id: 'b', name: 'B', stack: 511 },
+      ],
+      dealerSeat: 0,
+      smallBlind: 25,
+      bigBlind: 50,
+      rng: fixedRng(1962 * 31 + 7),
+    });
+
+    // A (dealer/SB) shoves all-in over the top preflop.
+    expect(engine.getCurrentActorId()).toBe('a');
+    engine.act('a', 'raise', 867);
+
+    // B must still get to act — the hand must NOT already be over.
+    expect(engine.isHandOver()).toBe(false);
+    expect(engine.getCurrentActorId()).toBe('b');
+    const valid = engine.getValidActions('b');
+    expect(valid.types).not.toContain('call'); // can't fully call, stack < owed
+    expect(valid.types).toContain('raise'); // all-in for less is offered as a raise
+
+    engine.act('b', 'raise', 511); // B's own all-in for their remaining stack
+
+    expect(engine.isHandOver()).toBe(true);
+    const b = engine.players.find((p) => p.id === 'b')!;
+    expect(b.allIn).toBe(true);
+    expect(b.totalContributed).toBe(511); // B's whole stack was genuinely at risk
+
+    // Whole-total math still holds: nobody's chips vanished or were created.
+    const total = engine.players.reduce((sum, p) => sum + p.stack, 0);
+    expect(total).toBe(867 + 511);
+  });
 });
