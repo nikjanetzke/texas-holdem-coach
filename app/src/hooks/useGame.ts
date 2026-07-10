@@ -172,7 +172,18 @@ export function useGame(setup: GameSetup) {
   const startHand = useCallback((dealer: number) => {
     const currentStacks = stacksRef.current;
     const activeSeats = setup.seats.filter((s) => currentStacks[s.id] > 0);
-    if (activeSeats.length < 2) return;
+    if (activeSeats.length < 2) {
+      // The game is over (someone busted, or the human is the last one left).
+      // This MUST set engine to null — Table.tsx's Champion/Game-over splash
+      // is gated on `!engine`. Without this, the hook just silently bailed
+      // here forever: nextHand() kept incrementing the hand number and
+      // re-arming the 3.5s auto-advance timer every cycle, while the board
+      // stayed frozen on the last (already-finished) hand — a permanent
+      // freeze that looked like a stuck game, sometimes with a stale "You
+      // Win" banner still attached to that last hand's result.
+      setEngine(null);
+      return;
+    }
     const level = levelAt(schedule, levelIndexRef.current);
     const newEngine = new HandEngine({
       players: setup.seats.map((s) => ({ id: s.id, name: s.name, stack: currentStacks[s.id] })),

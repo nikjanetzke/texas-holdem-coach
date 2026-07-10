@@ -255,18 +255,43 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
     if (currentActorId !== 'human') spokenTurnRef.current = -1;
   }, [currentActorId]);
 
-  // Auto-advance to the next hand a few seconds after a hand ends, unless paused.
+  // Auto-advance to the next hand after a hand ends, unless paused. Long enough
+  // to actually read what happened (cards, opponents' final bets, the result
+  // panel) — 3.5s was too tight to read a multi-way hand's action before the
+  // board was whisked away for the next deal.
   // nextHand's identity changes every render, so we call it via a ref and key the
   // effect on a stable boolean + handNumber — otherwise the 1s clock tick would
   // re-run this effect and reset the timer before it could ever fire.
+  const AUTO_ADVANCE_MS = 6500;
   const nextHandRef = useRef(nextHand);
   nextHandRef.current = nextHand;
   const handOver = !!engine && engine.isHandOver();
   useEffect(() => {
     if (!handOver || paused) return;
-    const t = setTimeout(() => nextHandRef.current(), 3500);
+    const t = setTimeout(() => nextHandRef.current(), AUTO_ADVANCE_MS);
     return () => clearTimeout(t);
   }, [handOver, paused, handNumber]);
+
+  // The win celebration (coin burst + gif + banner) is deliberately delayed and
+  // then auto-dismissed, rather than appearing instantly and staying up the
+  // whole auto-advance window. Previously it covered the community/hole cards
+  // the very instant the hand ended — before you'd even seen what beat what —
+  // and stayed there blocking the view. Now: a beat to see the cards and hear
+  // the dealer call the hand, THEN the celebration, THEN a clear view of the
+  // board and result panel again before the next hand deals.
+  const [showWinBanner, setShowWinBanner] = useState(false);
+  useEffect(() => {
+    if (!handOver) {
+      setShowWinBanner(false);
+      return;
+    }
+    const showAt = setTimeout(() => setShowWinBanner(true), 1100);
+    const hideAt = setTimeout(() => setShowWinBanner(false), 1100 + 2400);
+    return () => {
+      clearTimeout(showAt);
+      clearTimeout(hideAt);
+    };
+  }, [handOver, handNumber]);
 
   function toggleMuted() {
     const next = !muted;
@@ -512,8 +537,11 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
         </div>
       )}
 
-      {/* Win celebration — win gif (if present) + coin burst + banner. */}
-      {isHandOver && payouts['human'] > 0 && (
+      {/* Win celebration — win gif (if present) + coin burst + banner. Delayed
+          and auto-dismissed (see showWinBanner above) so it comes AFTER you've
+          had a moment to see the cards and hear the hand called, and clears
+          again afterward instead of sitting over the board indefinitely. */}
+      {showWinBanner && payouts['human'] > 0 && (
         <div className="pointer-events-none fixed inset-0 z-30 flex flex-col items-center justify-start px-4 pt-[12vh]">
           <CoinBurst />
           {!winGifFailed && (

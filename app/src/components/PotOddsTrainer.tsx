@@ -137,7 +137,7 @@ export function PotOddsTrainer() {
             }}
             className={`relative h-5 w-9 rounded-full transition-colors ${timed ? 'bg-emerald-600' : 'bg-slate-600'}`}
           >
-            <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition-transform ${timed ? 'translate-x-4' : 'translate-x-0.5'}`} />
+            <span className={`absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white transition-transform ${timed ? 'translate-x-4' : 'translate-x-0'}`} />
           </button>
         </label>
       </div>

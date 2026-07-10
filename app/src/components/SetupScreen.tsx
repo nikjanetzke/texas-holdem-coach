@@ -181,8 +181,8 @@ function OptionToggle({
         className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${checked ? 'bg-emerald-600' : 'bg-slate-600'}`}
       >
         <span
-          className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-transform ${
-            checked ? 'translate-x-5' : 'translate-x-0.5'
+          className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white transition-transform ${
+            checked ? 'translate-x-5' : 'translate-x-0'
           }`}
         />
       </button>
@@ -317,8 +317,8 @@ function QuickGameForm({
             className={`relative h-6 w-11 rounded-full transition-colors ${actionTimerSeconds != null ? 'bg-emerald-600' : 'bg-slate-600'}`}
           >
             <span
-              className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-transform ${
-                actionTimerSeconds != null ? 'translate-x-5' : 'translate-x-0.5'
+              className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white transition-transform ${
+                actionTimerSeconds != null ? 'translate-x-5' : 'translate-x-0'
               }`}
             />
           </button>
