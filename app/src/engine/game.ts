@@ -287,9 +287,25 @@ export class HandEngine {
       return;
     }
 
+    // Bounded to at most one full lap of actingOrder — unlike the sibling
+    // search in moveToNextStreet() (which already has this guard), this loop
+    // had none. `stillToAct.length > 0` here guarantees a live, non-all-in
+    // player exists somewhere in actingOrder, so it should always be found
+    // well within one lap; but should that invariant ever be violated by an
+    // edge case, an unbounded `while` spins the browser tab's main thread
+    // forever — a hard freeze with no error, exactly matching reports of the
+    // game hanging mid-hand. Bounding it turns a possible hang into, at worst,
+    // a graceful fall-through to moveToNextStreet().
+    const startPointer = this.actorPointer;
     this.actorPointer = (this.actorPointer + 1) % this.actingOrder.length;
+    let guard = 0;
     while (this.players[this.actingOrder[this.actorPointer]].folded || this.players[this.actingOrder[this.actorPointer]].allIn) {
       this.actorPointer = (this.actorPointer + 1) % this.actingOrder.length;
+      guard++;
+      if (guard > this.actingOrder.length || this.actorPointer === startPointer) {
+        this.moveToNextStreet();
+        return;
+      }
     }
   }
 

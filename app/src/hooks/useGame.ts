@@ -292,12 +292,26 @@ export function useGame(setup: GameSetup) {
         positionFraction,
         bigBlind: currentLevel.bigBlind,
       });
+      // The fallback act() call here was itself unguarded: if the engine's
+      // state had already moved on by the time this timer fired (e.g. a race
+      // with another update), that call could ALSO throw — and since nothing
+      // after it was wrapped, the exception would escape the setTimeout
+      // callback entirely, skipping forceRender(). No error dialog, no
+      // crash — just a UI that stops updating while the JS engine itself is
+      // fine, which looks exactly like a silent freeze. The try/finally below
+      // guarantees a re-render happens regardless of what these calls do, so
+      // the UI can never get stuck silently even if both actions fail.
       try {
-        engine.act(actorId, decision.type, decision.amount);
-      } catch {
-        engine.act(actorId, valid.types.includes('check') ? 'check' : 'fold');
+        try {
+          engine.act(actorId, decision.type, decision.amount);
+        } catch {
+          engine.act(actorId, valid.types.includes('check') ? 'check' : 'fold');
+        }
+      } catch (err) {
+        console.error('Bot action failed for', actorId, err);
+      } finally {
+        forceRender((n) => n + 1);
       }
-      forceRender((n) => n + 1);
     }, BOT_DELAY_MIN_MS + Math.random() * (BOT_DELAY_MAX_MS - BOT_DELAY_MIN_MS));
 
     return () => clearTimeout(timer);
