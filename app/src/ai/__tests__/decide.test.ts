@@ -10,6 +10,22 @@ function cards(spec: string): Card[] {
   }));
 }
 
+// A real (but deterministic) PRNG. A constant rng like `() => 0.5` must NOT be
+// used for anything that runs an equity simulation: every Monte Carlo
+// iteration then draws the exact same cards, so the estimate collapses to a
+// degenerate 0% or 100% and the AI is being tested against a shuffling
+// artifact rather than a realistic equity. Seeded so runs stay reproducible.
+function seededRng(seed: number): () => number {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
 describe('decideAIAction', () => {
   it('a tight AI folds a weak hand facing a big bet', () => {
     const decision = decideAIAction({
@@ -46,19 +62,27 @@ describe('decideAIAction', () => {
   });
 
   it('a calling station calls more often than it folds with marginal equity', () => {
-    const decision = decideAIAction({
-      holeCards: cards('9h 8h'),
-      communityCards: cards('2c 5d Jh'),
-      numOpponents: 1,
-      potBeforeAction: 100,
-      amountToCall: 20,
-      stack: 500,
-      currentBet: 20,
-      minRaiseTo: 40,
-      validActions: ['fold', 'call', 'raise'],
-      profile: AI_ARCHETYPES.callingStation,
-      rng: () => 0.5,
-    });
-    expect(['call', 'raise']).toContain(decision.type);
+    // 9h8h on 2c5dJh is ~34% against one opponent — genuinely marginal, and
+    // cheap to continue (20 into a 100 pot needs only ~17%). A calling station
+    // should take this the large majority of the time.
+    let continued = 0;
+    const runs = 25;
+    for (let i = 0; i < runs; i++) {
+      const decision = decideAIAction({
+        holeCards: cards('9h 8h'),
+        communityCards: cards('2c 5d Jh'),
+        numOpponents: 1,
+        potBeforeAction: 100,
+        amountToCall: 20,
+        stack: 500,
+        currentBet: 20,
+        minRaiseTo: 40,
+        validActions: ['fold', 'call', 'raise'],
+        profile: AI_ARCHETYPES.callingStation,
+        rng: seededRng(1000 + i),
+      });
+      if (decision.type === 'call' || decision.type === 'raise') continued++;
+    }
+    expect(continued).toBeGreaterThan(runs / 2);
   });
 });

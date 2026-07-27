@@ -26,6 +26,13 @@ export interface ActionLogEntry {
   playerId: string;
   type: ActionType;
   amount?: number;
+  /**
+   * True for blinds and antes — money that is posted automatically rather than
+   * chosen. Logged as 'bet' like any other wager, so without this flag the UI
+   * can't tell a forced post from a real decision and would label the big blind
+   * as though the player had voluntarily bet.
+   */
+  forced?: boolean;
 }
 
 export interface ShowdownResult {
@@ -124,7 +131,7 @@ export class HandEngine {
         player.stack -= delta;
         player.totalContributed += delta;
         player.allIn = player.stack === 0;
-        this.actionLog.push({ street: 'preflop', playerId: player.id, type: 'bet', amount: delta });
+        this.actionLog.push({ street: 'preflop', playerId: player.id, type: 'bet', amount: delta, forced: true });
       }
     }
 
@@ -193,7 +200,7 @@ export class HandEngine {
     player.streetContributed += delta;
     player.totalContributed += delta;
     player.allIn = player.stack === 0;
-    this.actionLog.push({ street: 'preflop', playerId: player.id, type: 'bet', amount: delta });
+    this.actionLog.push({ street: 'preflop', playerId: player.id, type: 'bet', amount: delta, forced: true });
   }
 
   getCurrentActorId(): string | null {

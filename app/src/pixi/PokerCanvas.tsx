@@ -14,6 +14,8 @@ export interface SeatViewModel {
   isWinner: boolean;
   showCards: boolean;
   handLabel?: string;
+  /** Most recent action this street, e.g. "Call $50" / "Raise $200" / "Check". */
+  lastAction?: string;
   speech?: string;
   portrait?: string;
 }
@@ -372,11 +374,17 @@ export function PokerCanvas({ seats, communityCards, potTotal, handNumber, winne
     // see their backs) to free up table space.
     if (!player.folded) {
       const cardsContainer = new Container();
-      const cw = isHuman ? CARD_W_SM : CARD_W_SM * 0.7;
-      const ch = isHuman ? CARD_H_SM : CARD_H_SM * 0.7;
-      const gap = isHuman ? cw + 6 : cw * 0.5; // overlap for opponents
-      const cardY = boxH / 2 - ch - 8;
       const showFaces = isHuman || showCards;
+      // Opponents' cards are drawn smaller and overlapping to save table space
+      // — fine while they're face-down, but at showdown their faces ARE shown
+      // and the overlap hid most of each card, making it impossible to read
+      // what they actually held. Whenever faces are visible, spread them out
+      // (and back off the size reduction) so both cards are fully legible.
+      const shrink = isHuman ? 1 : showFaces ? 0.85 : 0.7;
+      const cw = CARD_W_SM * shrink;
+      const ch = CARD_H_SM * shrink;
+      const gap = isHuman || showFaces ? cw + 6 : cw * 0.5;
+      const cardY = boxH / 2 - ch - 8;
       for (let i = 0; i < 2; i++) {
         const card = player.holeCards[i];
         const node = showFaces && card ? drawCardFace(card, cw, ch) : drawCardBack(cw, ch);
@@ -432,12 +440,42 @@ export function PokerCanvas({ seats, communityCards, potTotal, handNumber, winne
       c.addChild(t);
     }
 
+    // What this player just did, above the seat. Colour-coded so aggression is
+    // readable at a glance: red-ish for a raise/all-in, green for a call,
+    // grey for a check.
+    if (seat.lastAction && !player.folded && !handLabel) {
+      const a = seat.lastAction;
+      const tone = a.startsWith('Raise') || a.startsWith('All in') || a.startsWith('Bet')
+        ? 0xfca5a5
+        : a.startsWith('Call')
+          ? 0x86efac
+          : 0xcbd5e1;
+      const t = new Text({
+        text: a.toUpperCase(),
+        style: new TextStyle({ fontFamily: 'system-ui, sans-serif', fontSize: 12, fontWeight: 'bold', fill: tone, letterSpacing: 0.5 }),
+      });
+      t.anchor.set(0.5);
+      const pillW = t.width + 14;
+      // Reuses the bottom-centre pill slot that FOLDED / the hand rank occupy.
+      // Those only appear when the player is out or at showdown, and this label
+      // is gated off in both cases, so the three can never collide — whereas
+      // the seat's top edge is already taken by the name, the dealer/blind
+      // badges and the speech bubble.
+      const pill = new Graphics();
+      pill.roundRect(-pillW / 2, boxH / 2 - 22, pillW, 18, 9).fill({ color: 0x0b1220, alpha: 0.85 });
+      c.addChild(pill);
+      t.position.set(0, boxH / 2 - 13);
+      c.addChild(t);
+    }
+
     if (seat.speech) {
-      const bubbleStyle = new TextStyle({ fontFamily: 'system-ui, sans-serif', fontSize: 11, fontStyle: 'italic', fill: 0x0b0b0b, wordWrap: true, wordWrapWidth: 130 });
+      // Bumped from 11px/130px-wrap — table chatter was too small to read
+      // comfortably at normal viewing distance.
+      const bubbleStyle = new TextStyle({ fontFamily: 'system-ui, sans-serif', fontSize: 15, fontStyle: 'italic', fill: 0x0b0b0b, wordWrap: true, wordWrapWidth: 190 });
       const bubbleText = new Text({ text: seat.speech, style: bubbleStyle });
       bubbleText.anchor.set(0.5);
-      const bubbleW = Math.min(150, bubbleText.width + 18);
-      const bubbleH = bubbleText.height + 14;
+      const bubbleW = Math.min(215, bubbleText.width + 22);
+      const bubbleH = bubbleText.height + 16;
       const bubble = new Graphics();
       bubble
         .roundRect(-bubbleW / 2, -bubbleH, bubbleW, bubbleH, 8)

@@ -112,13 +112,44 @@ export function compareHandValues(a: HandValue, b: HandValue): number {
 }
 
 // Finds the best 5-card hand from any 5, 6, or 7 cards.
+// Precomputed 5-card index combinations, keyed by input size. Building these
+// via the recursive `combinations()` helper allocated a fresh array-of-arrays
+// (plus a spread per element) on EVERY hand evaluation — and equity estimation
+// calls this hundreds of thousands of times, so it dominated the runtime and
+// forced the Monte Carlo sample size down to where the reported equity visibly
+// wobbled. The index sets are pure functions of the input length, so they're
+// computed once and cached; the per-call work is now just filling one reusable
+// 5-card buffer.
+const COMBO_INDEX_CACHE = new Map<number, number[][]>();
+
+function fiveCardIndexes(n: number): number[][] {
+  let cached = COMBO_INDEX_CACHE.get(n);
+  if (!cached) {
+    cached = combinations(
+      Array.from({ length: n }, (_, i) => i),
+      5,
+    );
+    COMBO_INDEX_CACHE.set(n, cached);
+  }
+  return cached;
+}
+
 export function evaluateBestHand(cards: Card[]): HandValue {
   if (cards.length < 5) throw new Error('Need at least 5 cards to evaluate a hand');
+  const indexSets = fiveCardIndexes(cards.length);
+  // One scratch buffer, refilled per combination. IMPORTANT: evaluateFive
+  // returns this same array as HandValue.cards, so the winner's cards must be
+  // copied out before the buffer is overwritten — otherwise the returned hand
+  // would silently point at whichever combination happened to be evaluated
+  // last (and those cards are shown to the player at showdown).
+  const five: Card[] = new Array(5);
   let best: HandValue | null = null;
-  for (const five of combinations(cards, 5)) {
+  for (let s = 0; s < indexSets.length; s++) {
+    const idx = indexSets[s];
+    for (let c = 0; c < 5; c++) five[c] = cards[idx[c]];
     const value = evaluateFive(five);
     if (!best || compareHandValues(value, best) > 0) {
-      best = value;
+      best = { rank: value.rank, tiebreakers: value.tiebreakers, cards: five.slice() };
     }
   }
   return best!;

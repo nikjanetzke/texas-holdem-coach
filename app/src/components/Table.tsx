@@ -64,7 +64,7 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
   // read first; resets each turn. `heldAdvice` keeps the last suggestion around
   // for the rest of the hand so toggling the coach on after you fold still shows it.
   const [coachRevealed, setCoachRevealed] = useState(false);
-  const [heldAdvice, setHeldAdvice] = useState<typeof advice>(null);
+  const [heldAdvice, setHeldAdvice] = useState<{ advice: NonNullable<typeof advice>; street: string } | null>(null);
   const [showCardRating, setShowCardRating] = useState(false);
   const [showMath, setShowMath] = useState(false);
   const [openPanel, setOpenPanel] = useState<'stats' | 'history' | 'export' | null>('stats');
@@ -209,9 +209,15 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
   });
 
   // Hold onto the latest advice so it survives past your own turn within a hand.
+  // The street it was computed on is captured alongside it: once the board runs
+  // out, these numbers describe the spot as it was AT THAT DECISION, not the
+  // finished board the player is now looking at. Showing e.g. preflop equity
+  // next to a complete five-card board (with no indication of which street it
+  // came from) is why the breakdown looked like it wasn't about the hand being
+  // held. The panel now labels stale advice explicitly.
   useEffect(() => {
-    if (advice) setHeldAdvice(advice);
-  }, [advice]);
+    if (advice && engine) setHeldAdvice({ advice, street: engine.street });
+  }, [advice, engine]);
 
   // New hand: clear the held suggestion and re-arm the reveal gate.
   useEffect(() => {
@@ -384,6 +390,35 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
   const leaks = leakTracker.topLeaks();
   const payouts = engine.showdownResult?.payouts ?? {};
   const bestHands = engine.showdownResult?.bestHandByPlayer ?? {};
+
+  // Each player's most recent action on the CURRENT street, so the table shows
+  // "Raise $200" / "Call" / "Check" rather than just a pile of chips. Without
+  // this the only clue to what an opponent did was the size of their chip
+  // stack, which makes a call and a raise look identical at a glance.
+  // Blind posts are skipped: they're forced, not decisions, and labelling them
+  // "Bet" pre-flop would be misleading.
+  const lastActionByPlayer: Record<string, string> = {};
+  {
+    for (const entry of engine.actionLog) {
+      if (entry.street !== engine.street) continue;
+      if (entry.forced) continue; // blinds and antes aren't decisions
+      const amount = entry.amount ? ` $${entry.amount.toLocaleString()}` : '';
+      const player = engine.players.find((pl) => pl.id === entry.playerId);
+      const label =
+        entry.type === 'fold'
+          ? 'Fold'
+          : entry.type === 'check'
+            ? 'Check'
+            : entry.type === 'call'
+              ? `Call${amount}`
+              : player?.allIn
+                ? `All in${amount}`
+                : entry.type === 'raise'
+                  ? `Raise${amount}`
+                  : `Bet${amount}`;
+      lastActionByPlayer[entry.playerId] = label;
+    }
+  }
 
   const sbPlayerId = engine.smallBlindId;
   const bbPlayerId = engine.bigBlindId;
@@ -579,6 +614,7 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
             const handLabel = isHandOver && bestHands[p.id] ? HAND_RANK_NAMES[bestHands[p.id].rank] : undefined;
             return {
               player: p,
+              lastAction: lastActionByPlayer[p.id],
               isDealer: idx === engine.dealerSeat,
               isSmallBlind: p.id === sbPlayerId,
               isBigBlind: p.id === bbPlayerId,
@@ -625,8 +661,12 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
             </div>
           );
         }
-        const shown = liveTurn ? advice : heldAdvice;
+        const shown = liveTurn ? advice : heldAdvice?.advice ?? null;
         if (!shown) return null;
+        // Stale = computed at an earlier decision point, so the board has moved
+        // on since. Must be called out, or the figures look like they describe
+        // the current (finished) board when they don't.
+        const staleStreet = !liveTurn && heldAdvice && heldAdvice.street !== engine.street ? heldAdvice.street : null;
         return (
           <div className="animate-fade-up relative mt-4 overflow-hidden rounded-xl border border-indigo-400/25 bg-gradient-to-b from-indigo-950/70 to-slate-950/80 p-3 text-sm text-slate-200 shadow-lg ring-1 ring-white/5">
             <div className="pointer-events-none absolute inset-x-6 top-0 h-px bg-gradient-to-r from-transparent via-indigo-400/60 to-transparent" />
@@ -639,6 +679,13 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
               <Stat label="Equity" value={`${shown.equityPercent.toFixed(0)}%`} />
               <Stat label="Pot odds" value={`${shown.potOddsPercent.toFixed(0)}%`} />
             </div>
+            {staleStreet && (
+              <div className="mb-2 rounded-lg border border-amber-500/30 bg-amber-950/30 px-2 py-1 text-xs text-amber-200">
+                These numbers are from your decision on the{' '}
+                <span className="font-semibold capitalize">{staleStreet}</span> — worked out from the cards that were
+                showing <em>then</em>, not the finished board.
+              </div>
+            )}
             <ul className="list-inside list-disc space-y-0.5 text-slate-300">
               {shown.reasoning.map((r, i) => (
                 <li key={i}>{r}</li>
@@ -798,11 +845,53 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
       {isHandOver && engine.showdownResult && (
         <div className="animate-fade-up mt-4 rounded-xl border border-emerald-600/50 bg-slate-900/80 p-3 text-sm text-slate-200">
           <div className="mb-1 font-semibold text-emerald-300">Hand result</div>
-          {Object.entries(payouts).map(([id, amount]) => (
-            <div key={id}>
-              <span className="font-semibold">{engine.players.find((p) => p.id === id)?.name}</span> won ${amount.toLocaleString()}
-            </div>
-          ))}
+          {/* Who won, WITH WHAT, and what everyone else held. Previously this
+              said only "Name won $X", so on a loss there was no way to see
+              which hand beat you — the winning rank and the showdown cards
+              were computed but never displayed. */}
+          {Object.entries(payouts).map(([id, amount]) => {
+            const winner = engine.players.find((p) => p.id === id);
+            const best = bestHands[id];
+            return (
+              <div key={id} className="flex flex-wrap items-baseline gap-x-1.5">
+                <span className="font-semibold text-emerald-200">{winner?.name}</span>
+                <span>won ${amount.toLocaleString()}</span>
+                {best && (
+                  <>
+                    <span className="text-slate-400">with</span>
+                    <span className="font-semibold text-amber-300">{HAND_RANK_NAMES[best.rank]}</span>
+                    <span className="font-mono text-xs text-slate-400">({cardsToText(best.cards)})</span>
+                  </>
+                )}
+              </div>
+            );
+          })}
+          {/* Everyone who saw the showdown, so a loss is explainable at a glance. */}
+          {(() => {
+            const shown = engine.players.filter((p) => !p.sittingOut && !p.folded && bestHands[p.id]);
+            if (shown.length < 2) return null;
+            return (
+              <div className="mt-2 border-t border-slate-700/60 pt-2">
+                <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">Showdown</div>
+                <div className="space-y-0.5">
+                  {shown
+                    .slice()
+                    .sort((a, b) => (payouts[b.id] ?? 0) - (payouts[a.id] ?? 0))
+                    .map((p) => (
+                      <div key={p.id} className="flex flex-wrap items-baseline gap-x-1.5 text-xs">
+                        <span className={`font-semibold ${payouts[p.id] ? 'text-emerald-200' : 'text-slate-300'}`}>
+                          {p.id === 'human' ? 'You' : p.name}
+                        </span>
+                        <span className="font-mono text-slate-400">{cardsToText(p.holeCards)}</span>
+                        <span className="text-slate-500">→</span>
+                        <span className="text-slate-200">{HAND_RANK_NAMES[bestHands[p.id].rank]}</span>
+                        <span className="font-mono text-slate-500">({cardsToText(bestHands[p.id].cards)})</span>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            );
+          })()}
           {coachEnabled && handSummary && handSummary.length > 0 && (
             <div className="mt-2 space-y-0.5 text-slate-300">
               {handSummary.map((s, i) => (
@@ -1005,6 +1094,19 @@ function MathBreakdown({ math, suggested }: { math: CoachMath; suggested: Action
       </p>
       <div>
         <div className="font-semibold text-slate-200">1. Equity — your chance to win</div>
+        {/* Spell out the exact cards used, so it's clear the figure really is
+            about the hand in front of you (and which board it assumed). */}
+        <p className="mt-0.5 text-slate-400">
+          Worked out for <span className="font-mono text-slate-200">{cardsToText(math.holeCards)}</span>
+          {math.boardCards.length > 0 ? (
+            <>
+              {' '}on a board of <span className="font-mono text-slate-200">{cardsToText(math.boardCards)}</span>
+            </>
+          ) : (
+            <> before any board cards (pre-flop)</>
+          )}
+          :
+        </p>
         <p className="mt-0.5 text-slate-400">
           We deal out the rest of the board {math.iterations.toLocaleString()} times at random against{' '}
           {math.numOpponents} opponent{math.numOpponents === 1 ? '' : 's'} and count how often you'd win:
@@ -1085,6 +1187,7 @@ function chenLabel(score: number): { label: string; tone: string } {
 
 const SUIT_CHARS: Record<Card['suit'], string> = { s: '♠', h: '♥', d: '♦', c: '♣' };
 const rankLabel = (r: Card['rank']) => (r === 'T' ? '10' : r);
+const cardsToText = (cards: Card[]) => cards.map((c) => `${rankLabel(c.rank)}${SUIT_CHARS[c.suit]}`).join(' ');
 
 function StartingHandRating({ cards, open, onToggle }: { cards: Card[]; open: boolean; onToggle: () => void }) {
   const score = chenScore(cards);

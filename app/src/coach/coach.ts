@@ -40,6 +40,11 @@ export interface CoachMath {
   lossPercent: number;
   iterations: number;
   numOpponents: number;
+  // The exact cards this calculation was run on. Surfaced in the breakdown so
+  // there's no ambiguity about whether the numbers describe the hand actually
+  // being held (and, once the board moves on, which street they came from).
+  holeCards: Card[];
+  boardCards: Card[];
   equityPercent: number;
   potBeforeCall: number;
   amountToCall: number;
@@ -58,8 +63,56 @@ export interface CoachAdvice {
   math: CoachMath;
 }
 
+// Monte Carlo sample size, scaled so the wall-clock cost stays roughly flat
+// regardless of how many opponents have to be simulated and compared.
+// The old flat 300 samples was far too few: the SAME spot could report 49% on
+// one render and 65% on the next (measured 16-point spread), which reads as
+// the coach simply being wrong. These counts hold the run-to-run spread to
+// roughly a point or two while keeping the computation inside a ~200ms budget.
+function iterationsFor(numOpponents: number): number {
+  return Math.max(1000, Math.min(2500, Math.round(9000 / (numOpponents + 2))));
+}
+
+// Deterministic PRNG seeded from the spot itself, so a given decision always
+// produces the SAME equity figure. Without this the estimate was reseeded from
+// Math.random on every re-render, so the displayed percentage visibly flickered
+// while the player sat on one decision — the single biggest reason the coach's
+// numbers looked untrustworthy.
+function mulberry32(seed: number): () => number {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function seedForSpot(input: CoachAdviceInput): number {
+  const key = [
+    ...input.holeCards.map((c) => `${c.rank}${c.suit}`),
+    '|',
+    ...input.communityCards.map((c) => `${c.rank}${c.suit}`),
+    '|',
+    input.numOpponents,
+  ].join('');
+  let h = 2166136261;
+  for (let i = 0; i < key.length; i++) {
+    h ^= key.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
 export function generateAdvice(input: CoachAdviceInput): CoachAdvice {
-  const equityResult = estimateEquity(input.holeCards, input.communityCards, input.numOpponents, 300, input.rng);
+  const equityResult = estimateEquity(
+    input.holeCards,
+    input.communityCards,
+    input.numOpponents,
+    iterationsFor(input.numOpponents),
+    input.rng ?? mulberry32(seedForSpot(input)),
+  );
   const equity = equityResult.winProbability + equityResult.tieProbability / 2;
   const handStrengthLabel = classifyHandStrength(equity);
   const potOdds = computePotOdds(input.potBeforeAction, input.amountToCall);
@@ -162,6 +215,8 @@ export function generateAdvice(input: CoachAdviceInput): CoachAdvice {
       lossPercent: equityResult.lossProbability * 100,
       iterations: equityResult.iterations,
       numOpponents: input.numOpponents,
+      holeCards: input.holeCards,
+      boardCards: input.communityCards,
       equityPercent: equity * 100,
       potBeforeCall: potOdds.potBeforeCall,
       amountToCall: potOdds.amountToCall,
