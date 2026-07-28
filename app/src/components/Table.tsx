@@ -389,6 +389,7 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
   lastHumanStackRef.current = human.stack;
   const leaks = leakTracker.topLeaks();
   const payouts = engine.showdownResult?.payouts ?? {};
+  const refunds = engine.showdownResult?.refunds ?? {};
   const bestHands = engine.showdownResult?.bestHandByPlayer ?? {};
 
   // Each player's most recent action on the CURRENT street, so the table shows
@@ -866,6 +867,18 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
               </div>
             );
           })}
+          {/* Uncalled money coming back is NOT a win — it's the player's own
+              excess bet that no one could match. Shown separately and worded
+              plainly so it can't read as winnings. */}
+          {Object.entries(refunds).map(([id, amount]) => (
+            <div key={`refund-${id}`} className="text-slate-400">
+              <span className="font-semibold text-slate-300">
+                {id === 'human' ? 'You' : engine.players.find((p) => p.id === id)?.name}
+              </span>{' '}
+              got back ${amount.toLocaleString()} — the part of {id === 'human' ? 'your' : 'their'} bet nobody covered
+              (not winnings).
+            </div>
+          ))}
           {/* Everyone who saw the showdown, so a loss is explainable at a glance. */}
           {(() => {
             const shown = engine.players.filter((p) => !p.sittingOut && !p.folded && bestHands[p.id]);

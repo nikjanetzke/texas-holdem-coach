@@ -237,4 +237,47 @@ describe('HandEngine', () => {
     const total = engine.players.reduce((sum, p) => sum + p.stack, 0);
     expect(total).toBe(867 + 511);
   });
+
+  // Regression test for a real report: "I went all in and lost against the
+  // Professor, but the result said I won $11,519." Betting more than an
+  // opponent can cover creates a side pot only the bettor is eligible for.
+  // The chips correctly come back to them, but crediting that to `payouts`
+  // made losing the hand read as winning your own money back.
+  it('reports an uncalled all-in excess as a refund, not as winnings', () => {
+    const engine = new HandEngine({
+      players: [
+        { id: 'big', name: 'Big', stack: 3000 },
+        { id: 'small', name: 'Small', stack: 500 },
+      ],
+      dealerSeat: 0,
+      smallBlind: 25,
+      bigBlind: 50,
+      rng: fixedRng(7),
+    });
+
+    engine.act('big', 'raise', 3000); // shove, far more than Small can cover
+    engine.act('small', 'raise', 500); // Small all-in for their whole stack
+
+    expect(engine.isHandOver()).toBe(true);
+    const sd = engine.showdownResult!;
+
+    // Small could only ever cover 500, so exactly 2500 of Big's bet was never
+    // called and must be reported as returned, never as a win.
+    expect(sd.refunds['big']).toBe(2500);
+
+    // Whoever lost the showdown must not appear in payouts at all.
+    const bigWonShowdown = (sd.payouts['big'] ?? 0) > 0;
+    const smallWonShowdown = (sd.payouts['small'] ?? 0) > 0;
+    expect(bigWonShowdown && smallWonShowdown).toBe(false);
+    if (smallWonShowdown) {
+      expect(sd.payouts['big']).toBeUndefined();
+      expect(sd.payouts['small']).toBe(1000); // the contested 500 + 500
+    }
+
+    // Chips are still conserved regardless of how they're labelled.
+    const total = engine.players.reduce((sum, p) => sum + p.stack, 0);
+    expect(total).toBe(3500);
+    // And the refund really did reach the player's stack.
+    expect(engine.players.find((p) => p.id === 'big')!.stack).toBeGreaterThanOrEqual(2500);
+  });
 });

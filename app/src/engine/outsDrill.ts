@@ -1,6 +1,6 @@
 import type { Card, Rank, Suit } from './deck';
 import { RANKS, SUITS, cardToString, makeDeck, rankValue, shuffle } from './deck';
-import { HandRank, evaluateBestHand } from './evaluator';
+import { HandRank, compareHandValues, evaluateBestHand } from './evaluator';
 
 // A drill that teaches counting "outs" (cards that improve your hand) and
 // converting them to a rough win % via the rule of 2 & 4. Rather than detect
@@ -69,12 +69,25 @@ function trueOutsCount(hero: Card[], board: Card[], want: WantHit): number {
   const heroVals = hero.map((c) => rankValue(c.rank));
   let count = 0;
   for (const cand of remaining) {
-    const after = evaluateBestHand([...hero, ...board, cand]);
+    const fullBoard = [...board, cand];
+    const after = evaluateBestHand([...hero, ...fullBoard]);
     let hit: boolean;
     if (want === 'flush') hit = after.rank >= HandRank.Flush;
     else if (want === 'straight') hit = after.rank === HandRank.Straight || after.rank === HandRank.StraightFlush;
     else if (want === 'flushOrStraight') hit = after.rank === HandRank.Straight || after.rank >= HandRank.Flush;
     else hit = after.rank === HandRank.OnePair && heroVals.includes(after.tiebreakers[0]);
+    // A card that completes the hand ON THE BOARD is not an out. If the best
+    // five cards are the board itself, every player at the table holds the
+    // identical hand and you win nothing — at best you chop. This happens for
+    // real: a board of 3-4-6-2 with a 5 arriving reads 2-3-4-5-6, so a
+    // "gutshot" there has zero genuine outs even though the evaluator
+    // faithfully reports a straight. Only checkable once the board reaches
+    // five cards; with two cards still to come the board can't yet be a made
+    // five-card hand on its own.
+    if (hit && fullBoard.length >= 5) {
+      const boardOnly = evaluateBestHand(fullBoard);
+      if (compareHandValues(after, boardOnly) <= 0) hit = false;
+    }
     if (hit) count++;
   }
   return count;

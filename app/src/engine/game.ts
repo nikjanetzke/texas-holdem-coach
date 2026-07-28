@@ -37,7 +37,16 @@ export interface ActionLogEntry {
 
 export interface ShowdownResult {
   pots: Pot[];
-  payouts: Record<string, number>; // playerId -> amount won
+  /**
+   * Chips genuinely WON from other players. Excludes any uncalled portion of a
+   * player's own bet — see `refunds`. Reporting the two together made a losing
+   * all-in look like a win: betting more than an opponent could cover and then
+   * losing the showdown still showed "You won $X", where $X was simply the
+   * player's own excess coming back to them.
+   */
+  payouts: Record<string, number>;
+  /** Uncalled bet returned to its owner — their own money, not winnings. */
+  refunds: Record<string, number>;
   bestHandByPlayer: Record<string, HandValue>;
 }
 
@@ -437,6 +446,36 @@ export class HandEngine {
       if (payouts[p.id]) p.stack += payouts[p.id];
     }
 
-    this.showdownResult = { pots, payouts, bestHandByPlayer };
+    // Split the uncalled portion of a bet out of "winnings". If one player put
+    // in more than anybody else could match, that excess was never contested —
+    // it comes straight back to them whatever the showdown says. Chip movement
+    // above is already correct (the sole-eligible side pot returns it); this
+    // only separates the reporting so a losing all-in is never described as a
+    // win of the player's own money.
+    // Only meaningful when a showdown actually happened. If everyone else
+    // folded, the last player standing simply takes the pot uncontested —
+    // splitting that into "won" plus "returned" is noise, and conventional
+    // poker reporting treats a walkover as winning the whole pot.
+    const refunds: Record<string, number> = {};
+    const contributors = this.players.filter((p) => p.totalContributed > 0);
+    if (live.length > 1 && contributors.length > 1) {
+      const sorted = [...contributors].sort((a, b) => b.totalContributed - a.totalContributed);
+      const top = sorted[0];
+      const secondHighest = sorted[1].totalContributed;
+      const uncalled = top.totalContributed - secondHighest;
+      if (uncalled > 0) {
+        // Can't exceed what they were credited: the uncalled slice is exactly
+        // the side pot only they were eligible for.
+        const moved = Math.min(uncalled, payouts[top.id] ?? 0);
+        if (moved > 0) {
+          refunds[top.id] = moved;
+          const remaining = (payouts[top.id] ?? 0) - moved;
+          if (remaining > 0) payouts[top.id] = remaining;
+          else delete payouts[top.id];
+        }
+      }
+    }
+
+    this.showdownResult = { pots, payouts, refunds, bestHandByPlayer };
   }
 }
