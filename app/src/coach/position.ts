@@ -1,4 +1,5 @@
 import type { HandEngine } from '../engine/game';
+import type { Position } from './coach';
 
 // Beginner-first position info for the human's seat this hand. The design rule:
 // consequence first ("how many people act after you?"), colour second (red =
@@ -166,4 +167,23 @@ export function describeHumanPosition(engine: HandEngine): PositionInfo | null {
       'If the players before you folded, a raise here often wins the blinds outright — and when you do see a flop, you\'ll usually act after your opponents on every round. This is where marginal hands become playable.',
     ],
   };
+}
+
+// The coach's five-way seat label, taken from the same seat logic as the
+// position badge so the two always agree. (It used to come from the order of
+// play on the current street, where the 3-handed button acts first preflop —
+// so the coach called the button an "early seat" while the badge said Button.)
+const COACH_POSITION: Record<PositionKey, Position> = {
+  early: 'Early',
+  middle: 'Middle',
+  late: 'Late',
+  button: 'Late',
+  'headsup-btn': 'Late',
+  sb: 'Small Blind',
+  bb: 'Big Blind',
+};
+
+export function coachPositionFor(engine: HandEngine): Position | null {
+  const info = describeHumanPosition(engine);
+  return info ? COACH_POSITION[info.key] : null;
 }

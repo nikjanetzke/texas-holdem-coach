@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { HandEngine } from '../../engine/game';
-import { describeHumanPosition } from '../position';
+import { coachPositionFor, describeHumanPosition } from '../position';
 
 function engineWith(humanSeat: number, numPlayers: number, dealerSeat: number, stacks?: number[]): HandEngine {
   const players = Array.from({ length: numPlayers }, (_, i) => ({
@@ -56,3 +56,20 @@ describe('describeHumanPosition', () => {
     expect(describeHumanPosition(engineWith(2, 6, 0, [1000, 1000, 0, 1000, 1000, 1000]))).toBeNull();
   });
 });
+
+describe('coachPositionFor (the seat name the coach uses)', () => {
+  it('agrees with the badge 3-handed, where the button acts first before the flop', () => {
+    const e = engineWith(0, 3, 0);
+    expect(describeHumanPosition(e)!.key).toBe('button');
+    expect(e.getCurrentActorId()).toBe('human'); // button is first to act preflop 3-handed
+    expect(coachPositionFor(e)).toBe('Late'); // not "Early"
+  });
+
+  it('maps every seat consistently at 6 players', () => {
+    expect(coachPositionFor(engineWith(3, 6, 0))).toBe('Early');
+    expect(coachPositionFor(engineWith(5, 6, 0))).toBe('Late');
+    expect(coachPositionFor(engineWith(0, 6, 5))).toBe('Small Blind');
+    expect(coachPositionFor(engineWith(1, 6, 5))).toBe('Big Blind');
+  });
+});
+

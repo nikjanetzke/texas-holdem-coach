@@ -3,7 +3,20 @@ import { Application, Assets, Container, Graphics, Sprite, Text, TextStyle, Text
 import type { Card } from '../engine/deck';
 import type { HandPlayer } from '../engine/game';
 import * as theme from './theme';
-import { SEAT_BOX_H, SEAT_BOX_W, seatPosition, seatScaleFor } from './seatLayout';
+import {
+  BUBBLE_GAP,
+  betChipsSpot,
+  POT_Y,
+  SEAT_BOX_H,
+  SEAT_BOX_W,
+  chooseBubbleSide,
+  foldedCardsSpot,
+  seatBoxRect,
+  seatPosition,
+  seatScaleFor,
+  tableCentreRects,
+  type Rect,
+} from './seatLayout';
 import { drawFace, drawBadge, drawCardBack, drawCardFace, drawChipStack, CARD_W_SM, CARD_H_SM } from './draw';
 
 export interface SeatViewModel {
@@ -273,18 +286,20 @@ export function PokerCanvas({ seats, communityCards, potTotal, handNumber, winne
     potG.roundRect(-potW / 2, -12, potW, 24, 12).fill({ color: 0x000000, alpha: 0.55 }).stroke({ width: 1, color: theme.GOLD, alpha: 0.5 });
     const potContainer = new Container();
     potContainer.addChild(potG, potLabel);
-    potContainer.position.set(LOGICAL_W / 2, LOGICAL_H * 0.6);
+    potContainer.position.set(LOGICAL_W / 2, LOGICAL_H * POT_Y);
     scene.addChild(potContainer);
 
     const total = seats.length;
     const seatScale = seatScaleFor(total);
+    // What a speech bubble keeps clear of: the board and pot above all, then the other seats.
+    const centre = tableCentreRects(LOGICAL_W, LOGICAL_H, CARD_W_SM, CARD_H_SM);
+    const seatRects = seats.map((s, i) => seatBoxRect(i, total, LOGICAL_W, LOGICAL_H, s.player.id === 'human' ? 1 : seatScale));
     seats.forEach((seat, idx) => {
       const pos = seatPosition(idx, total, LOGICAL_W, LOGICAL_H);
       // Folded players' cards are tossed onto the felt in front of them and stay
       // there (face-down) for the rest of the hand, instead of sitting in the box.
       if (seat.player.folded) {
-        const fx = pos.x + (LOGICAL_W / 2 - pos.x) * 0.42;
-        const fy = pos.y + (LOGICAL_H / 2 - pos.y) * 0.42;
+        const { x: fx, y: fy } = foldedCardsSpot(idx, total, LOGICAL_W, LOGICAL_H, seatScale, CARD_W_SM, CARD_H_SM, centre.board);
         const fw = CARD_W_SM * 0.8 * seatScale;
         const fh = CARD_H_SM * 0.8 * seatScale;
         for (let i = 0; i < 2; i++) {
@@ -295,11 +310,16 @@ export function PokerCanvas({ seats, communityCards, potTotal, handNumber, winne
           scene.addChild(back);
         }
       }
-      scene.addChild(buildSeatNode(seat, pos.x, pos.y, seatScale));
+      const otherSeats = seatRects.filter((_, i) => i !== idx);
+      scene.addChild(buildSeatNode(seat, pos.x, pos.y, seatScale, otherSeats, [centre.board, centre.pot]));
       // Chips this player has put in the pot this street, between them and the centre.
       if (seat.player.streetContributed > 0) {
         const chips = drawChipStack(seat.player.streetContributed);
-        chips.position.set(pos.chipX, pos.chipY);
+        const isHuman = seat.player.id === 'human';
+        // Drawn box this frame: your seat grows a touch on your turn.
+        const drawn = seatBoxRect(idx, total, LOGICAL_W, LOGICAL_H, isHuman ? (seat.isActing ? 1.12 : 1) : seatScale);
+        const spot = betChipsSpot(idx, total, LOGICAL_W, LOGICAL_H, drawn, [...otherSeats, centre.board, centre.pot]);
+        chips.position.set(spot.x, spot.y);
         scene.addChild(chips);
       }
     });
@@ -308,7 +328,7 @@ export function PokerCanvas({ seats, communityCards, potTotal, handNumber, winne
     scene.addChild(board);
   }
 
-  function buildSeatNode(seat: SeatViewModel, x: number, y: number, seatScale = 1): Container {
+  function buildSeatNode(seat: SeatViewModel, x: number, y: number, seatScale = 1, obstacles: Rect[] = [], priority: Rect[] = []): Container {
     const c = new Container();
     c.position.set(x, y);
     const { player, isDealer, isSmallBlind, isBigBlind, isActing, isWinner, showCards, handLabel } = seat;
@@ -484,18 +504,35 @@ export function PokerCanvas({ seats, communityCards, potTotal, handNumber, winne
       bubbleText.anchor.set(0.5);
       const bubbleW = Math.min(215, bubbleText.width + 22);
       const bubbleH = bubbleText.height + 16;
+      // Above the seat when there's room, otherwise beside it (see chooseBubbleSide).
+      const sc = c.scale.x;
+      const side = chooseBubbleSide(
+        { x: x - (boxW * sc) / 2, y: y - (boxH * sc) / 2, w: boxW * sc, h: boxH * sc },
+        bubbleW * sc,
+        bubbleH * sc,
+        obstacles,
+        LOGICAL_W,
+        LOGICAL_H,
+        priority,
+      );
+      const gap = BUBBLE_GAP / sc;
+      // Top-left of the bubble in seat-local units, matching bubbleRect().
+      const bx = side === 'above' ? -bubbleW / 2 : side === 'right' ? boxW / 2 + gap : -boxW / 2 - gap - bubbleW;
+      const by = side === 'above' ? -boxH / 2 - gap - bubbleH : -boxH / 2 + 6 / sc;
+      const fill = { color: 0xfef9c3, alpha: 0.95 };
       const bubble = new Graphics();
-      bubble
-        .roundRect(-bubbleW / 2, -bubbleH, bubbleW, bubbleH, 8)
-        .fill({ color: 0xfef9c3, alpha: 0.95 })
-        .stroke({ width: 1, color: 0x000000, alpha: 0.3 });
-      bubble.moveTo(-6, -2).lineTo(6, -2).lineTo(0, 8).fill({ color: 0xfef9c3, alpha: 0.95 }).closePath();
-      const bubbleContainer = new Container();
-      bubbleContainer.addChild(bubble);
-      bubbleText.position.set(0, -bubbleH / 2);
-      bubbleContainer.addChild(bubbleText);
-      bubbleContainer.position.set(0, -boxH / 2 - 14);
-      c.addChild(bubbleContainer);
+      bubble.roundRect(bx, by, bubbleW, bubbleH, 8).fill(fill).stroke({ width: 1, color: 0x000000, alpha: 0.3 });
+      // The tail points back at the speaker.
+      if (side === 'above') {
+        bubble.moveTo(-6, by + bubbleH - 1).lineTo(6, by + bubbleH - 1).lineTo(0, by + bubbleH + 8).closePath().fill(fill);
+      } else {
+        const edge = side === 'right' ? bx + 1 : bx + bubbleW - 1;
+        const tip = side === 'right' ? bx - 8 : bx + bubbleW + 8;
+        const midY = by + Math.min(bubbleH / 2, 18);
+        bubble.moveTo(edge, midY - 6).lineTo(edge, midY + 6).lineTo(tip, midY).closePath().fill(fill);
+      }
+      bubbleText.position.set(bx + bubbleW / 2, by + bubbleH / 2);
+      c.addChild(bubble, bubbleText);
     }
 
     return c;
@@ -563,12 +600,14 @@ export function PokerCanvas({ seats, communityCards, potTotal, handNumber, winne
   function animateMuck(seatIdx: number) {
     const total = seats.length;
     const pos = seatPosition(seatIdx, total, LOGICAL_W, LOGICAL_H);
-    // 45% of the way from the seat toward the table centre.
-    const tossX = pos.x + (LOGICAL_W / 2 - pos.x) * 0.45;
-    const tossY = pos.y + (LOGICAL_H / 2 - pos.y) * 0.45;
+    // Land where the folded cards then rest (in front of the seat, or beside it
+    // for seats across the top, so they never cover the board).
+    const scale = seatScaleFor(total);
+    const { board } = tableCentreRects(LOGICAL_W, LOGICAL_H, CARD_W_SM, CARD_H_SM);
+    const spot = foldedCardsSpot(seatIdx, total, LOGICAL_W, LOGICAL_H, scale, CARD_W_SM, CARD_H_SM, board);
     holeCardCorners(pos.x, pos.y).forEach((corner, i) => {
       const card = drawCardBack(CARD_W_SM, CARD_H_SM);
-      tween(card, corner, { x: tossX - CARD_W_SM / 2 + i * 10, y: tossY - CARD_H_SM / 2 + i * 4 }, { durMs: 480, fadeOut: true });
+      tween(card, corner, { x: spot.x - CARD_W_SM / 2 + i * 10, y: spot.y - CARD_H_SM / 2 + i * 4 }, { durMs: 480, fadeOut: true });
     });
   }
 

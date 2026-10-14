@@ -30,6 +30,27 @@ export interface CoachAdviceInput {
   amountToCall: number;
   position: Position;
   rng?: () => number;
+  /** Big blind size. With `effectiveStack`, turns on short-stack (all-in or fold) advice. */
+  bigBlind?: number;
+  /** Chips at risk this hand: the smaller of your stack and the biggest opponent's, counting chips already bet this round. */
+  effectiveStack?: number;
+  /** Your chips not yet in the pot. Used to spot when calling already puts you all-in. */
+  stackBehind?: number;
+}
+
+// Short-stack play before the flop: at this many big blinds or fewer, the
+// good options are all-in or fold (what the short-stack scenario teaches).
+export const SHORT_STACK_BB = 15;
+
+// Minimum equity against random hands to go all-in first, by how many
+// opponents are still in. Calibrated so heads-up at ~12bb it reproduces the
+// short-stack scenario's chart (K-8, A-2, Q-T, J-8 suited in; Q-5, J-4 out),
+// and tightens as more players could wake up with a hand. Pairs always go in.
+function shoveThreshold(opponents: number, stackBB: number): number {
+  const base = opponents <= 1 ? 0.51 : opponents === 2 ? 0.37 : opponents === 3 ? 0.3 : opponents === 4 ? 0.25 : 0.22;
+  if (stackBB <= 7) return base - 0.03; // nearly blinded out: go wider
+  if (stackBB > 12) return base + 0.02;
+  return base;
 }
 
 // The raw numbers behind the advice, so the UI can show *how* the verdict was
@@ -58,6 +79,8 @@ export interface CoachAdvice {
   position: Position;
   potOddsPercent: number;
   suggestedAction: ActionType;
+  /** The suggested raise is "go all-in" (short-stack play). */
+  allIn?: boolean;
   reasoning: string[];
   warnings: string[];
   math: CoachMath;
@@ -190,6 +213,48 @@ export function generateAdvice(input: CoachAdviceInput): CoachAdvice {
     }
   }
 
+  // Short stack before the flop: all-in or fold. Raising small, or just
+  // calling, leaves too few chips to play the rest of the hand.
+  let allIn = false;
+  const stackBB = input.bigBlind && input.effectiveStack != null ? input.effectiveStack / input.bigBlind : Infinity;
+  if (preflop && stackBB <= SHORT_STACK_BB) {
+    const bbs = Math.max(1, Math.round(stackBB));
+    const unopened = input.amountToCall <= (input.bigBlind ?? 0); // nobody has raised yet
+    const callIsAllIn = input.stackBehind != null && input.amountToCall >= input.stackBehind;
+    const isPair = input.holeCards.length === 2 && input.holeCards[0].rank === input.holeCards[1].rank;
+    reasoning.length = 1; // keep the hand-strength line; replace the deep-stack reasoning
+    if (unopened) {
+      if (isPair || equity >= shoveThreshold(input.numOpponents, stackBB)) {
+        suggestedAction = 'raise';
+        allIn = true;
+        reasoning.push(
+          `You only have about ${bbs} big blinds — too few to raise, miss the flop and fold. Go all-in: everyone else has to fold all but their good hands, and even when you're called this hand has a real chance.`,
+        );
+      } else if (input.amountToCall === 0) {
+        suggestedAction = 'check';
+        reasoning.push(`You only have about ${bbs} big blinds, so only go all-in with good hands. This one isn't, but you can check and see the flop for free.`);
+      } else {
+        suggestedAction = 'fold';
+        reasoning.push(
+          `You only have about ${bbs} big blinds: the good options are all-in or fold. This hand isn't strong enough to risk everything, so fold and wait for a better one. Just calling wastes chips you can't spare.`,
+        );
+      }
+    } else if (suggestedAction === 'call' || suggestedAction === 'raise') {
+      if (callIsAllIn) {
+        suggestedAction = 'call';
+        reasoning.push(`Calling puts all your chips in, and your ${(equity * 100).toFixed(0)}% chance to win is worth the ${potOdds.potOddsPercent.toFixed(0)}% the call costs.`);
+      } else {
+        suggestedAction = 'raise';
+        allIn = true;
+        reasoning.push(
+          `You're short (about ${bbs} big blinds). With a hand good enough to continue, go all-in rather than calling — a call leaves you too few chips to play the rest of the hand, and going all-in can make them fold.`,
+        );
+      }
+    } else {
+      reasoning.push(`Someone has raised and you only have about ${bbs} big blinds. Your ${(equity * 100).toFixed(0)}% chance isn't worth the ${potOdds.potOddsPercent.toFixed(0)}% it costs to continue — fold.`);
+    }
+  }
+
   if (input.position === 'Small Blind' || input.position === 'Big Blind') {
     if (input.communityCards.length > 0) {
       warnings.push('You will be out of position for the rest of the hand, acting before your opponents on later streets.');
@@ -215,6 +280,7 @@ export function generateAdvice(input: CoachAdviceInput): CoachAdvice {
     position: input.position,
     potOddsPercent: potOdds.potOddsPercent,
     suggestedAction,
+    allIn,
     reasoning,
     warnings,
     math: {
@@ -232,6 +298,11 @@ export function generateAdvice(input: CoachAdviceInput): CoachAdvice {
       facingBet,
     },
   };
+}
+
+/** What to call the suggestion on screen: "all in" for a short-stack shove, otherwise the action. */
+export function suggestionLabel(advice: Pick<CoachAdvice, 'suggestedAction' | 'allIn'>): string {
+  return advice.allIn ? 'all in' : advice.suggestedAction;
 }
 
 export type Leak = 'overcalling' | 'overfolding' | 'overbluffing' | 'ignoringPotOdds' | 'outOfPositionPlay';

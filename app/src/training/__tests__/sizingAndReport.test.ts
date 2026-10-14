@@ -9,7 +9,20 @@ import {
   sizingNote,
 } from '../sizingDrill';
 import { buildSessionReport, type SessionData } from '../sessionReport';
-import { SEAT_BOX_W, seatPosition, seatScaleFor } from '../../pixi/seatLayout';
+import {
+  SEAT_BOX_W,
+  betChipsArea,
+  betChipsSpot,
+  bubbleRect,
+  chooseBubbleSide,
+  foldedCardsArea,
+  foldedCardsSpot,
+  seatBoxRect,
+  seatPosition,
+  seatScaleFor,
+  tableCentreRects,
+  type Rect,
+} from '../../pixi/seatLayout';
 
 const C = (s: string): Card => ({ rank: s.slice(0, -1) as Card['rank'], suit: s.slice(-1) as Card['suit'] });
 const B = (...xs: string[]) => xs.map(C);
@@ -124,3 +137,75 @@ describe('seat layout', () => {
     }
   });
 });
+
+describe('nothing on the table covers anything else', () => {
+  const W = 880;
+  const H = 500;
+  const CW = 57; // card size used on the table
+  const CH = 80;
+  const overlaps = (a: Rect, b: Rect) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+  const onCanvas = (r: Rect) => r.x >= 0 && r.y >= 0 && r.x + r.w <= W && r.y + r.h <= H;
+  const { board, pot } = tableCentreRects(W, H, CW, CH);
+  // Seat 0 is you (bottom centre, drawn full size); opponents shrink on big tables.
+  const rects = (total: number) => Array.from({ length: total }, (_, i) => seatBoxRect(i, total, W, H, i === 0 ? 1 : seatScaleFor(total)));
+
+  it('folded cards never land on the community cards', () => {
+    for (let total = 2; total <= 10; total++) {
+      const scale = seatScaleFor(total);
+      for (let i = 0; i < total; i++) {
+        const area = foldedCardsArea(foldedCardsSpot(i, total, W, H, scale, CW, CH, board), scale, CW, CH);
+        expect(overlaps(area, board), `seat ${i} of ${total}`).toBe(false);
+        expect(onCanvas(area), `seat ${i} of ${total}`).toBe(true);
+      }
+    }
+  });
+
+  it('a short bubble ("I win!") never covers the pot, the board, another seat, or leaves the table', () => {
+    for (let total = 2; total <= 10; total++) {
+      const seats = rects(total);
+      for (let i = 0; i < total; i++) {
+        const sc = i === 0 ? 1 : seatScaleFor(total);
+        const bw = 80 * sc;
+        const bh = 34 * sc;
+        const others = seats.filter((_, j) => j !== i);
+        const side = chooseBubbleSide(seats[i], bw, bh, others, W, H, [board, pot]);
+        const r = bubbleRect(side, seats[i], bw, bh);
+        const where = `seat ${i} of ${total} (${side})`;
+        expect(overlaps(r, pot), where).toBe(false);
+        expect(overlaps(r, board), where).toBe(false);
+        expect(others.some((o) => overlaps(r, o)), where).toBe(false);
+        expect(onCanvas(r), where).toBe(true);
+      }
+    }
+  });
+
+  it('your own bubble stays off the pot label, even a two-line chat message', () => {
+    for (let total = 2; total <= 10; total++) {
+      const seats = rects(total);
+      for (const [bw, bh] of [[80, 34], [215, 56]]) {
+        const side = chooseBubbleSide(seats[0], bw, bh, seats.slice(1), W, H, [board, pot]);
+        expect(overlaps(bubbleRect(side, seats[0], bw, bh), pot), `${total} players, ${bw}x${bh} (${side})`).toBe(false);
+      }
+    }
+  });
+
+  it("bet chips never sit on their own seat, another seat, the board, or the pot", () => {
+    for (let total = 2; total <= 10; total++) {
+      const seats = rects(total);
+      for (let i = 0; i < total; i++) {
+        for (const grow of i === 0 ? [1, 1.12] : [seatScaleFor(total)]) {
+          const box = seatBoxRect(i, total, W, H, grow);
+          const others = seats.filter((_, j) => j !== i);
+          const area = betChipsArea(betChipsSpot(i, total, W, H, box, [...others, board, pot]));
+          const where = `seat ${i} of ${total}, grow ${grow}`;
+          expect(overlaps(area, box), where).toBe(false);
+          expect(overlaps(area, pot), where).toBe(false);
+          expect(overlaps(area, board), where).toBe(false);
+          expect(others.some((o) => overlaps(area, o)), where).toBe(false);
+          expect(onCanvas(area), where).toBe(true);
+        }
+      }
+    }
+  });
+});
+

@@ -8,6 +8,7 @@ import type { AIProfile } from '../ai/profiles';
 import { CHARACTERS } from '../ai/characters';
 import { classifyPosition, generateAdvice, LeakTracker, scoreDecision } from '../coach/coach';
 import type { CoachAdvice, Leak } from '../coach/coach';
+import { coachPositionFor } from '../coach/position';
 import { loadSession, saveSession } from '../persistence/storage';
 import { BLIND_SCHEDULES, DEFAULT_SCHEDULE_ID, levelAt } from '../engine/blinds';
 import type { BlindLevel } from '../engine/blinds';
@@ -189,15 +190,11 @@ function adviceForHumanSpot(engine: HandEngine): CoachAdvice {
   const valid = engine.getValidActions('human');
   const numOpponents = engine.players.filter((p) => !p.folded && !p.sittingOut && p.id !== 'human').length;
   const seatIndexInOrder = engine.actingOrder.findIndex((seatIdx) => engine.players[seatIdx].id === 'human');
-  // Pass the real blind flags — these were hardcoded to false, so the coach
-  // never knew the human was in the blinds and skipped its blind-specific
-  // advice ("you'll act first after the flop...") entirely.
-  const position = classifyPosition(
-    seatIndexInOrder,
-    engine.actingOrder.length,
-    engine.smallBlindId === 'human',
-    engine.bigBlindId === 'human',
-  );
+  // Same seat logic as the position badge, so the coach's words and the badge
+  // agree. The order-of-play fallback is only for a seat the badge can't place.
+  const position =
+    coachPositionFor(engine) ??
+    classifyPosition(seatIndexInOrder, engine.actingOrder.length, engine.smallBlindId === 'human', engine.bigBlindId === 'human');
   const potTotal = engine.players.reduce((sum, p) => sum + p.totalContributed, 0);
   return generateAdvice({
     holeCards: player.holeCards,
@@ -206,6 +203,14 @@ function adviceForHumanSpot(engine: HandEngine): CoachAdvice {
     potBeforeAction: potTotal - player.streetContributed,
     amountToCall: valid.callAmount,
     position,
+    // Stack depth, for short-stack (all-in or fold) advice: the most either
+    // side can lose this hand is the smaller of the two stacks.
+    bigBlind: engine.bigBlind,
+    effectiveStack: Math.min(
+      player.stack + player.totalContributed,
+      Math.max(0, ...engine.players.filter((p) => !p.folded && !p.sittingOut && p.id !== 'human').map((p) => p.stack + p.totalContributed)),
+    ),
+    stackBehind: player.stack,
   });
 }
 
@@ -500,10 +505,12 @@ export function useGame(setup: GameSetup) {
         position: advice.position,
       });
       // Save clear-cut errors for the "Practise your mistakes" drill. `advice`
-      // here is spotAdvice, guaranteed to describe this exact decision.
+      // here is spotAdvice, guaranteed to describe this exact decision. Never
+      // when you did what the coach suggested (e.g. a short stack folding a
+      // hand not good enough to go all-in with).
       let savedToDrill = false;
       {
-        const kind = classifyMistake({
+        const kind = type === advice.suggestedAction ? null : classifyMistake({
           action: type,
           validTypes: valid.types,
           callAmount: valid.callAmount,

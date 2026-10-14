@@ -11,7 +11,7 @@ import { PokerCanvas } from '../pixi/PokerCanvas';
 import { soundManager, type SfxName } from '../sound/SoundManager';
 import { setSpeechEnabled, speak, speechSupported } from '../sound/speech';
 import { chenScore } from '../engine/preflop';
-import type { CoachMath } from '../coach/coach';
+import { suggestionLabel, type CoachMath } from '../coach/coach';
 import type { Card } from '../engine/deck';
 import { SCENARIO_STRATEGIES } from '../scenarios/strategy';
 import { StrategyGuide } from './StrategyGuide';
@@ -294,7 +294,7 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: (practiseDr
     spokenTurnRef.current = handNumber;
     speak(
       coachEnabled
-        ? `It's your turn. Coach suggests ${advice.suggestedAction}. ${advice.reasoning[0] ?? ''}`
+        ? `It's your turn. Coach suggests ${suggestionLabel(advice)}. ${advice.reasoning[0] ?? ''}`
         : `It's your turn.`,
     );
   }, [speechOn, currentActorId, engine, advice, handNumber, coachEnabled]);
@@ -733,7 +733,7 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: (practiseDr
             <div className="mb-2 flex flex-wrap items-center gap-2">
               <span className="rounded bg-gradient-to-b from-indigo-500 to-indigo-700 px-2 py-0.5 text-xs font-bold uppercase tracking-wide text-white shadow ring-1 ring-indigo-400/40">Coach</span>
               <span className="font-semibold">
-                Suggests: <span className="text-amber-300 capitalize">{shown.suggestedAction}</span>
+                Suggests: <span className="text-amber-300 capitalize">{suggestionLabel(shown)}</span>
               </span>
               <Stat label="Hand" value={shown.handStrengthLabel} />
               <Stat label="Equity" value={`${shown.equityPercent.toFixed(0)}%`} />
@@ -762,7 +762,7 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: (practiseDr
             >
               {showMath ? '▾ Hide the math' : '▸ Show the math'}
             </button>
-            {showMath && <MathBreakdown math={shown.math} suggested={shown.suggestedAction} />}
+            {showMath && <MathBreakdown math={shown.math} suggested={suggestionLabel(shown)} />}
           </div>
         );
       })()}
@@ -1183,7 +1183,7 @@ function clamp(value: number, valid: { minRaiseTo: number; maxRaiseTo: number; t
   return Math.max(min, Math.min(valid.maxRaiseTo, value));
 }
 
-function MathBreakdown({ math, suggested }: { math: CoachMath; suggested: ActionType }) {
+function MathBreakdown({ math, suggested }: { math: CoachMath; suggested: string }) {
   const equity = math.equityPercent;
   const beatsOdds = equity >= math.potOddsPercent;
   return (
