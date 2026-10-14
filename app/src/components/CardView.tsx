@@ -40,7 +40,7 @@ export function CardView({
         isRed ? 'text-rose-600' : 'text-slate-900'
       } ${animate ? 'animate-flip' : ''}`}
     >
-      <span>{card.rank}</span>
+      <span>{card.rank === 'T' ? '10' : card.rank}</span>
       <span className={size === 'sm' ? 'text-xs' : 'text-base'}>{SUIT_SYMBOLS[card.suit]}</span>
     </div>
   );

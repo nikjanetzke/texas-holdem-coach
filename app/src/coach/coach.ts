@@ -81,6 +81,8 @@ export interface CoachAdvice {
   suggestedAction: ActionType;
   /** The suggested raise is "go all-in" (short-stack play). */
   allIn?: boolean;
+  /** The main reason for the suggestion, in one sentence. */
+  why?: string;
   reasoning: string[];
   warnings: string[];
   math: CoachMath;
@@ -255,6 +257,9 @@ export function generateAdvice(input: CoachAdviceInput): CoachAdvice {
     }
   }
 
+  // The line that explains the suggestion itself (pushed last by the decision logic above).
+  const why = reasoning[reasoning.length - 1];
+
   if (input.position === 'Small Blind' || input.position === 'Big Blind') {
     if (input.communityCards.length > 0) {
       warnings.push('You will be out of position for the rest of the hand, acting before your opponents on later streets.');
@@ -281,6 +286,7 @@ export function generateAdvice(input: CoachAdviceInput): CoachAdvice {
     potOddsPercent: potOdds.potOddsPercent,
     suggestedAction,
     allIn,
+    why,
     reasoning,
     warnings,
     math: {

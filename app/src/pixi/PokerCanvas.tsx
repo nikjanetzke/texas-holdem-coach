@@ -32,6 +32,8 @@ export interface SeatViewModel {
   lastAction?: string;
   speech?: string;
   portrait?: string;
+  /** Opponent note shown on the seat, e.g. "Calls a lot" (coach on only). */
+  note?: { text: string; tone: 'red' | 'amber' | 'green' | 'blue' | 'slate' };
 }
 
 export interface PokerCanvasProps {
@@ -50,6 +52,8 @@ export interface PokerCanvasProps {
   winningCards?: Card[];
   width?: number;
   height?: number;
+  /** Tapping an opponent's seat (used to open their notes). */
+  onSeatClick?: (playerId: string) => void;
 }
 
 function truncateName(name: string, max = 8): string {
@@ -93,7 +97,18 @@ function easeOutCubic(t: number): number {
 }
 
 
-export function PokerCanvas({ seats, communityCards, potTotal, handNumber, winnerIds, winningCards, width = LOGICAL_W, height = LOGICAL_H }: PokerCanvasProps) {
+const NOTE_COLORS: Record<NonNullable<SeatViewModel['note']>['tone'], number> = {
+  red: 0xfca5a5,
+  amber: 0xfcd34d,
+  green: 0x86efac,
+  blue: 0x93c5fd,
+  slate: 0xcbd5e1,
+};
+
+export function PokerCanvas({ seats, communityCards, potTotal, handNumber, winnerIds, winningCards, width = LOGICAL_W, height = LOGICAL_H, onSeatClick }: PokerCanvasProps) {
+  // Read through a ref so the scene (rebuilt on every change) always calls the latest handler.
+  const onSeatClickRef = useRef(onSeatClick);
+  onSeatClickRef.current = onSeatClick;
   const hostRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<Application | null>(null);
   const sceneRef = useRef<Container | null>(null);
@@ -387,6 +402,27 @@ export function PokerCanvas({ seats, communityCards, potTotal, handNumber, winne
     stackText.anchor.set(0, 0.5);
     stackText.position.set(textX, -boxH / 2 + 46);
     c.addChild(stackText);
+
+    // Opponent note ("Calls a lot"...) under the stack — tap the seat for the full note.
+    if (seat.note && !isHuman) {
+      const color = NOTE_COLORS[seat.note.tone];
+      const t = new Text({
+        text: seat.note.text,
+        style: new TextStyle({ fontFamily: 'system-ui, sans-serif', fontSize: 12, fontWeight: 'bold', fill: color }),
+      });
+      t.anchor.set(0, 0.5);
+      const maxW = boxW / 2 - textX - 12;
+      if (t.width > maxW) t.scale.set(maxW / t.width, 1);
+      const pill = new Graphics();
+      pill.roundRect(textX - 4, -boxH / 2 + 59, t.width + 8, 17, 8).fill({ color: 0x0b1220, alpha: 0.75 }).stroke({ width: 1, color, alpha: 0.6 });
+      t.position.set(textX, -boxH / 2 + 67.5);
+      c.addChild(pill, t);
+    }
+    if (!isHuman && onSeatClickRef.current) {
+      c.eventMode = 'static';
+      c.cursor = 'pointer';
+      c.on('pointertap', () => onSeatClickRef.current?.(player.id));
+    }
 
     // Hole cards along the bottom. The human's are full size and side-by-side so
     // they're readable; opponents' are 30% smaller and overlapping (we only ever

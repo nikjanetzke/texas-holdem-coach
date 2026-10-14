@@ -1,8 +1,10 @@
-import { type CSSProperties, type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
-import type { GameSetup } from '../hooks/useGame';
+import { type CSSProperties, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { GameSetup, HandRecord } from '../hooks/useGame';
 import { SpeedPicker } from './SpeedPicker';
 import { useGame } from '../hooks/useGame';
-import { HandHistoryPanel } from './HandHistoryPanel';
+import { HandHistoryPanel, HandReplay } from './HandHistoryPanel';
+import { OpponentNotes, type OpponentEntry } from './OpponentNotes';
+import { readOpponent } from '../training/opponentNotes';
 import { StatsPanel } from './StatsPanel';
 import { ExportControls } from './ExportControls';
 import { HAND_RANK_NAMES } from '../engine/evaluator';
@@ -91,6 +93,9 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: (practiseDr
   const [chatText, setChatText] = useState('');
   const [strategyOpen, setStrategyOpen] = useState(false);
   const [positionOpen, setPositionOpen] = useState(false);
+  const [replayRecord, setReplayRecord] = useState<HandRecord | null>(null);
+  // Opponent notes: open (undefined = closed), optionally focused on one player.
+  const [notesFor, setNotesFor] = useState<string | null | undefined>(undefined);
   const scenarioStrategy = setup.scenarioId ? SCENARIO_STRATEGIES[setup.scenarioId] : undefined;
   const prevSecLeftRef = useRef<number | null>(null);
   const spokenTurnRef = useRef<number>(-1);
@@ -149,7 +154,19 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: (practiseDr
   // Desktop keyboard shortcuts: F fold · C check/call · R bet/raise (slider
   // amount) · A all-in · N next hand. They do exactly what the buttons do, and
   // stay out of the way while typing in chat or with a dialog open.
-  const anyDialogOpen = showMenu || showReport || strategyOpen || positionOpen || chatOpen;
+  // Coaching dialogs only count while the coach is on — turning it off hides them,
+  // and a hidden dialog mustn't keep blocking shortcuts and auto-advance.
+  const coachDialogOpen = coachEnabled && (positionOpen || notesFor !== undefined);
+  const anyDialogOpen = showMenu || showReport || strategyOpen || chatOpen || !!replayRecord || coachDialogOpen;
+
+  // What you know about each opponent (coaching UI: only used while the coach is on).
+  const opponents: OpponentEntry[] = useMemo(
+    () =>
+      setup.seats
+        .filter((s) => !s.isHuman && s.profile)
+        .map((s) => ({ id: s.id, name: s.name, portrait: s.profile!.portrait ?? s.portrait, read: readOpponent(s.profile!, handHistory, s.id) })),
+    [setup.seats, handHistory],
+  );
   useEffect(() => {
     if (!engine) return;
     const onKey = (e: KeyboardEvent) => {
@@ -317,11 +334,13 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: (practiseDr
   const nextHandRef = useRef(nextHand);
   nextHandRef.current = nextHand;
   const handOver = !!engine && engine.isHandOver();
+  // Held while a dialog is open (e.g. replaying this hand), so the next hand
+  // never deals behind something you're reading.
   useEffect(() => {
-    if (!handOver || paused) return;
+    if (!handOver || paused || anyDialogOpen) return;
     const t = setTimeout(() => nextHandRef.current(), AUTO_ADVANCE_MS);
     return () => clearTimeout(t);
-  }, [handOver, paused, handNumber, AUTO_ADVANCE_MS]);
+  }, [handOver, paused, handNumber, AUTO_ADVANCE_MS, anyDialogOpen]);
 
   // The win celebration (coin burst + gif + banner) is deliberately delayed and
   // then auto-dismissed, rather than appearing instantly and staying up the
@@ -529,7 +548,11 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: (practiseDr
             )}
           </span>
           <button
-            onClick={() => setCoachEnabled((v) => !v)}
+            onClick={() => {
+              setCoachEnabled((v) => !v);
+              setNotesFor(undefined);
+              setPositionOpen(false);
+            }}
             className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold transition-colors sm:text-sm ${
               coachEnabled ? 'bg-indigo-600 text-white hover:bg-indigo-500' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
             }`}
@@ -537,6 +560,15 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: (practiseDr
           >
             🎓 Coach <span className={coachEnabled ? 'text-emerald-300' : 'text-slate-500'}>{coachEnabled ? 'On' : 'Off'}</span>
           </button>
+          {coachEnabled && opponents.length > 0 && (
+            <button
+              onClick={() => setNotesFor(null)}
+              className="flex items-center gap-1 rounded-full bg-slate-800 px-2.5 py-1 text-xs font-semibold text-slate-200 transition-colors hover:bg-slate-700 sm:text-sm"
+              title="Notes on how each opponent plays, and how to beat them"
+            >
+              🔍 Reads
+            </button>
+          )}
           <button
             onClick={toggleMuted}
             className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold transition-colors sm:text-sm ${
@@ -687,8 +719,16 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: (practiseDr
                 const cfg = setup.seats.find((s) => s.id === p.id);
                 return cfg?.profile?.portrait ?? cfg?.portrait;
               })(),
+              note: (() => {
+                if (!coachEnabled) return undefined;
+                const read = opponents.find((o) => o.id === p.id)?.read;
+                if (!read?.ready) return undefined;
+                const top = read.notes[0];
+                return top ? { text: top.seatTag, tone: top.tone } : { text: 'Balanced', tone: 'slate' as const };
+              })(),
             };
           })}
+          onSeatClick={coachEnabled ? (id) => setNotesFor(id) : undefined}
         />
         </div>
 
@@ -984,12 +1024,22 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: (practiseDr
               ))}
             </div>
           )}
-          <button
-            onClick={nextHand}
-            className="mt-3 rounded-lg bg-emerald-600 px-5 py-2 font-semibold transition-colors hover:bg-emerald-500"
-          >
-            Next hand →
-          </button>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              onClick={nextHand}
+              className="rounded-lg bg-emerald-600 px-5 py-2 font-semibold transition-colors hover:bg-emerald-500"
+            >
+              Next hand →
+            </button>
+            {handHistory[0]?.handNumber === handNumber && (
+              <button
+                onClick={() => setReplayRecord(handHistory[0])}
+                className="rounded-lg bg-slate-800 px-4 py-2 font-semibold text-slate-200 ring-1 ring-slate-600 transition-colors hover:bg-slate-700"
+              >
+                ↺ Replay this hand
+              </button>
+            )}
+          </div>
         </div>
       )}
 
@@ -1065,6 +1115,12 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: (practiseDr
         </div>
       )}
 
+      {coachEnabled && notesFor !== undefined && (
+        <OpponentNotes opponents={opponents} focusId={notesFor} onClose={() => setNotesFor(undefined)} />
+      )}
+
+      {replayRecord && <HandReplay record={replayRecord} coachEnabled={coachEnabled} onClose={() => setReplayRecord(null)} />}
+
       {/* Hand history & export live in a modal (opened from the ⋯ button) so they
           don't take up game screen space — they're only needed for review/export. */}
       {showMenu && (
@@ -1100,7 +1156,7 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: (practiseDr
                 open={openPanel === 'history'}
                 onToggle={() => setOpenPanel((p) => (p === 'history' ? null : 'history'))}
               >
-                <HandHistoryPanel history={handHistory} />
+                <HandHistoryPanel history={handHistory} onReplay={setReplayRecord} />
               </Collapsible>
               <Collapsible
                 label="Export & share"

@@ -6,7 +6,7 @@ import type { ActionType } from '../engine/betting';
 import { decideAIAction } from '../ai/decide';
 import type { AIProfile } from '../ai/profiles';
 import { CHARACTERS } from '../ai/characters';
-import { classifyPosition, generateAdvice, LeakTracker, scoreDecision } from '../coach/coach';
+import { classifyPosition, generateAdvice, LeakTracker, scoreDecision, suggestionLabel } from '../coach/coach';
 import type { CoachAdvice, Leak } from '../coach/coach';
 import { coachPositionFor } from '../coach/position';
 import { loadSession, saveSession } from '../persistence/storage';
@@ -17,6 +17,7 @@ import { classifyMistake, saveMistake } from '../training/mistakes';
 import type { MistakeKind } from '../training/mistakes';
 import { sizingNote } from '../training/sizingDrill';
 import { buildSessionReport, type SessionHand } from '../training/sessionReport';
+import type { DecisionCoachNote } from '../training/replay';
 
 export interface SeatConfig {
   id: string;
@@ -63,6 +64,8 @@ export interface DecisionTiming {
   thinkMs: number;
   equityPercent: number | null;
   potOddsPercent: number | null;
+  /** The coach's verdict on this decision, for the hand replayer. */
+  coach?: DecisionCoachNote;
 }
 
 export interface HandRecord {
@@ -73,6 +76,8 @@ export interface HandRecord {
   actionLog: ActionLogEntry[];
   showdownResult: ShowdownResult | null;
   decisionTimings: DecisionTiming[];
+  /** Everyone's chips before the hand (for the replayer). Missing on older saved hands. */
+  startStacks?: Record<string, number>;
 }
 
 const MAX_HAND_HISTORY = 20;
@@ -283,6 +288,8 @@ export function useGame(setup: GameSetup) {
   // each decision's elapsed time is collected per hand for the review and export.
   const turnStartRef = useRef<number | null>(null);
   const currentHandTimingsRef = useRef<DecisionTiming[]>([]);
+  // Chips each player had when this hand was dealt (before blinds), for the replayer.
+  const handStartStacksRef = useRef<Record<string, number>>({});
 
   const startHand = useCallback((dealer: number) => {
     const currentStacks = stacksRef.current;
@@ -308,6 +315,7 @@ export function useGame(setup: GameSetup) {
       ante: level.ante,
       holeCardBias: setup.cardLuck && setup.cardLuck !== 'normal' ? { playerId: 'human', band: setup.cardLuck } : undefined,
     });
+    handStartStacksRef.current = Object.fromEntries(newEngine.players.map((p) => [p.id, p.stack + p.totalContributed]));
     setEngine(newEngine);
     setHandSummary(null);
     setAdvice(null);
@@ -421,6 +429,7 @@ export function useGame(setup: GameSetup) {
       actionLog: eng.actionLog,
       showdownResult: eng.showdownResult,
       decisionTimings: [...currentHandTimingsRef.current],
+      startStacks: Object.fromEntries(eng.players.map((p) => [p.id, handStartStacksRef.current[p.id] ?? p.stack])),
     };
     setHandHistory((prev) => [record, ...prev].slice(0, MAX_HAND_HISTORY));
   };
@@ -480,14 +489,6 @@ export function useGame(setup: GameSetup) {
     }
     turnStartRef.current = null;
 
-    currentHandTimingsRef.current.push({
-      street,
-      action: type,
-      thinkMs,
-      equityPercent: spotAdvice.equityPercent,
-      potOddsPercent: spotAdvice.potOddsPercent,
-    });
-
     {
       const advice = spotAdvice;
       const result = scoreDecision({
@@ -496,6 +497,22 @@ export function useGame(setup: GameSetup) {
         equityPercent: advice.equityPercent,
         potOddsPercent: advice.potOddsPercent,
         position: advice.position,
+      });
+      currentHandTimingsRef.current.push({
+        street,
+        action: type,
+        thinkMs,
+        equityPercent: advice.equityPercent,
+        potOddsPercent: advice.potOddsPercent,
+        coach: {
+          suggested: suggestionLabel(advice),
+          score: result.score,
+          explanation: result.explanation,
+          reason: advice.why,
+          equityPercent: advice.equityPercent,
+          potOddsPercent: advice.potOddsPercent,
+          toCall: valid.callAmount,
+        },
       });
       leakTracker.current.record({
         actualAction: type,
