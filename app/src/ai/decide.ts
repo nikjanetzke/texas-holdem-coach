@@ -90,12 +90,14 @@ export function decideAIAction(input: AIDecisionInput): AIDecision {
         frac = 0.4 + profile.aggression * 0.3; // bluff sizing
       }
       const amount = clamp(Math.round(pot * frac), bb, input.stack);
-      return {
-        type: 'bet',
-        amount,
-        equity,
-        reasoning: strong ? `Value bet with ~${eqPct}% equity on a ${tex.danger > 0.5 ? 'wet' : 'dry'} board.` : 'Betting as a bluff to apply pressure.',
-      };
+      const reasoning = strong ? `Value bet with ~${eqPct}% equity on a ${tex.danger > 0.5 ? 'wet' : 'dry'} board.` : 'Betting as a bluff to apply pressure.';
+      // The big blind's preflop option: nothing to call, but the blind is
+      // already a bet, so putting more in is a raise (to at least the minimum).
+      if (!input.validActions.includes('bet') && input.validActions.includes('raise')) {
+        const raiseTo = clamp(input.currentBet + amount, input.minRaiseTo, input.currentBet + input.stack);
+        return { type: 'raise', amount: raiseTo, equity, reasoning };
+      }
+      return { type: 'bet', amount, equity, reasoning };
     }
     return { type: 'check', equity, reasoning: `Checking with ~${eqPct}% equity — not enough to bet.` };
   }

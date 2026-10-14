@@ -1,5 +1,6 @@
 import { type CSSProperties, type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import type { GameSetup } from '../hooks/useGame';
+import { SpeedPicker } from './SpeedPicker';
 import { useGame } from '../hooks/useGame';
 import { HandHistoryPanel } from './HandHistoryPanel';
 import { StatsPanel } from './StatsPanel';
@@ -15,6 +16,8 @@ import type { Card } from '../engine/deck';
 import { SCENARIO_STRATEGIES } from '../scenarios/strategy';
 import { StrategyGuide } from './StrategyGuide';
 import { describeHumanPosition } from '../coach/position';
+import { SessionReport } from './SessionReport';
+import type { DrillId } from '../persistence/drillStats';
 
 // Colour does the early teaching: red = play tight, green = you have the edge,
 // blue = blinds (already paid in). The poker names come later, in the explainer.
@@ -34,7 +37,7 @@ const ACTION_SOUND: Record<ActionType, SfxName> = {
   'all-in': 'allin',
 };
 
-export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void }) {
+export function Table({ setup, onExit }: { setup: GameSetup; onExit: (practiseDrill?: DrillId) => void }) {
   const {
     engine,
     potTotal,
@@ -54,7 +57,12 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
     currentLevel,
     nextLevel,
     msLeftInLevel,
+    getSessionReport,
+    botSpeed,
+    setBotSpeed,
   } = useGame(setup);
+  // Leaving the table shows the session report first (if any hands were played).
+  const [showReport, setShowReport] = useState(false);
   const [raiseAmount, setRaiseAmount] = useState(0);
   const [muted, setMuted] = useState(soundManager.muted);
   const lastLoggedActionCount = useRef(0);
@@ -138,6 +146,38 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
   // each render, so keying the effect on it made the once-a-second clock tick
   // reset the slider mid-drag (the desktop "slider doesn't work" bug). Keying on a
   // stable signature (whose turn, street, price, hand) fixes that.
+  // Desktop keyboard shortcuts: F fold · C check/call · R bet/raise (slider
+  // amount) · A all-in · N next hand. They do exactly what the buttons do, and
+  // stay out of the way while typing in chat or with a dialog open.
+  const anyDialogOpen = showMenu || showReport || strategyOpen || positionOpen || chatOpen;
+  useEffect(() => {
+    if (!engine) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey || e.altKey || anyDialogOpen) return;
+      const tag = (e.target as HTMLElement | null)?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      const k = e.key.toLowerCase();
+      const me = engine.players.find((p) => p.id === 'human');
+      if (validActions) {
+        const t = validActions.types;
+        if (k === 'f' && t.includes('fold')) humanAct('fold');
+        else if (k === 'c' && t.includes('check')) humanAct('check');
+        else if (k === 'c' && t.includes('call')) humanAct('call');
+        else if (k === 'r' && t.includes('raise')) humanAct('raise', raiseAmount);
+        else if (k === 'r' && t.includes('bet')) humanAct('bet', raiseAmount);
+        else if (k === 'a' && (t.includes('raise') || t.includes('bet')))
+          humanAct(t.includes('raise') ? 'raise' : 'bet', validActions.maxRaiseTo);
+        else return;
+        e.preventDefault();
+      } else if (k === 'n' && (engine.isHandOver() || me?.folded)) {
+        e.preventDefault();
+        nextHand();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
+
   const turnSignature =
     validActions && engine ? `${currentActorId}|${engine.street}|${engine.currentBet}|${handNumber}` : null;
   useEffect(() => {
@@ -225,10 +265,13 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
     setCoachRevealed(false);
   }, [handNumber]);
 
-  // Re-arm the reveal each time it becomes the human's turn again.
+  // Re-arm the reveal for every new decision of yours — including two in a
+  // row (checking to close one street and then acting first on the next),
+  // which keeps the same actor and so isn't caught by currentActorId alone.
+  const actionCount = engine?.actionLog.length ?? 0;
   useEffect(() => {
     if (currentActorId === 'human') setCoachRevealed(false);
-  }, [currentActorId]);
+  }, [currentActorId, actionCount]);
 
   // Countdown beeps: a tick at 10s left, then every second from 5 down to 1.
   useEffect(() => {
@@ -268,7 +311,9 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
   // nextHand's identity changes every render, so we call it via a ref and key the
   // effect on a stable boolean + handNumber — otherwise the 1s clock tick would
   // re-run this effect and reset the timer before it could ever fire.
-  const AUTO_ADVANCE_MS = 6500;
+  // Scales with the chosen game speed: someone who picked "fast" opponents
+  // doesn't want to wait as long between hands either.
+  const AUTO_ADVANCE_MS = botSpeed === 'fast' ? 4000 : botSpeed === 'relaxed' ? 8500 : 6500;
   const nextHandRef = useRef(nextHand);
   nextHandRef.current = nextHand;
   const handOver = !!engine && engine.isHandOver();
@@ -276,7 +321,7 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
     if (!handOver || paused) return;
     const t = setTimeout(() => nextHandRef.current(), AUTO_ADVANCE_MS);
     return () => clearTimeout(t);
-  }, [handOver, paused, handNumber]);
+  }, [handOver, paused, handNumber, AUTO_ADVANCE_MS]);
 
   // The win celebration (coin burst + gif + banner) is deliberately delayed and
   // then auto-dismissed, rather than appearing instantly and staying up the
@@ -370,12 +415,14 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
               <p className="mt-2 text-slate-300">You're out of chips. Better luck next time.</p>
             </>
           )}
-          <button
-            onClick={onExit}
-            className="mt-6 w-full rounded-xl bg-gradient-to-b from-emerald-500 to-emerald-700 py-3 text-lg font-bold text-white shadow-lg shadow-emerald-900/40 ring-1 ring-emerald-400/40 transition-all hover:from-emerald-400 hover:to-emerald-600 active:scale-[0.99]"
-          >
-            ♠ Play again
-          </button>
+          <div className="mt-6 border-t border-slate-700/60 pt-4">
+            <SessionReport
+              report={getSessionReport(lastHumanStackRef.current)}
+              onPractise={(d) => onExit(d)}
+              onLeave={() => onExit()}
+              leaveLabel="♠ Play again"
+            />
+          </div>
         </div>
       </div>
     );
@@ -440,7 +487,12 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
         <div className="pointer-events-none absolute inset-x-6 top-0 h-px bg-gradient-to-r from-transparent via-amber-400/50 to-transparent" />
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <button
-            onClick={onExit}
+            onClick={() => {
+              // Chips already in an unfinished hand's pot aren't counted as lost.
+              const report = getSessionReport(human.stack + (isHandOver ? 0 : human.totalContributed));
+              if (report.handsPlayed > 0) setShowReport(true);
+              else onExit();
+            }}
             className="flex shrink-0 items-center gap-1 rounded-lg bg-slate-800 px-2 py-1 text-xs font-semibold text-slate-300 ring-1 ring-slate-600 hover:bg-slate-700 hover:text-slate-100 sm:text-sm"
             title="Leave this game and return to the menu"
           >
@@ -609,6 +661,13 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
           potTotal={potTotal}
           handNumber={handNumber}
           winnerIds={isHandOver ? Object.keys(payouts) : []}
+          winningCards={(() => {
+            // The biggest winner's best five (a walkover has none, so nothing
+            // is highlighted — no cards were compared).
+            if (!isHandOver) return undefined;
+            const top = Object.entries(payouts).sort((a, b) => b[1] - a[1]).find(([id]) => bestHands[id]);
+            return top ? bestHands[top[0]].cards : undefined;
+          })()}
           communityCards={engine.communityCards}
           seats={engine.players.map((p, idx) => {
             const showCards = p.id === 'human' || (isHandOver && !p.folded && !!engine.showdownResult);
@@ -824,6 +883,10 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
               />
             )}
           </div>
+          {/* Only on devices with a real keyboard and mouse. */}
+          <div className="mt-1.5 hidden text-[11px] text-slate-500 [@media(hover:hover)_and_(pointer:fine)]:block">
+            ⌨ F fold · C check/call · R bet/raise · A all in · N next hand
+          </div>
           </>
           )}
         </div>
@@ -916,6 +979,7 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
                   {s.savedToDrill && (
                     <span className="ml-1 text-indigo-300">📌 Saved to “Practise your mistakes” in Training.</span>
                   )}
+                  {s.note && <div className="mt-0.5 text-amber-300">💡 {s.note}</div>}
                 </div>
               ))}
             </div>
@@ -944,6 +1008,22 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
 
         </div>
       </div>
+
+      {showReport && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={() => setShowReport(false)}>
+          <div
+            className="max-h-[88vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-slate-700 bg-gradient-to-b from-slate-900 to-slate-950 p-5 shadow-2xl ring-1 ring-white/5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <SessionReport
+              report={getSessionReport(human.stack + (isHandOver ? 0 : human.totalContributed))}
+              onPractise={(d) => onExit(d)}
+              onLeave={() => onExit()}
+              onStay={() => setShowReport(false)}
+            />
+          </div>
+        </div>
+      )}
 
       {/* Re-openable scenario strategy guide (📖 in the top bar). */}
       {strategyOpen && scenarioStrategy && (
@@ -997,10 +1077,15 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-lg font-bold text-slate-100">Stats, history &amp; export</h2>
+              <h2 className="text-lg font-bold text-slate-100">Settings, stats &amp; history</h2>
               <button onClick={() => setShowMenu(false)} className="rounded px-2 py-1 text-slate-400 hover:bg-slate-800 hover:text-slate-100">
                 ✕
               </button>
+            </div>
+            <div className="mb-3 rounded-lg border border-slate-700 bg-slate-800/50 p-3">
+              <div className="mb-1.5 text-sm font-semibold text-slate-200">Game speed</div>
+              <SpeedPicker value={botSpeed} onChange={setBotSpeed} />
+              <p className="mt-1.5 text-xs text-slate-400">How quickly opponents act, and how long the result stays up between hands.</p>
             </div>
             <div className="space-y-2">
               <Collapsible

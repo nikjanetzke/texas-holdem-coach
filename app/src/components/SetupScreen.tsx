@@ -1,6 +1,9 @@
 import { useState } from 'react';
 import type { GameSetup } from '../hooks/useGame';
-import { buildDefaultSeats } from '../hooks/useGame';
+import type { DrillId } from '../persistence/drillStats';
+import { buildDefaultSeats, loadBotSpeedPref, saveBotSpeedPref } from '../hooks/useGame';
+import type { BotSpeed } from '../hooks/useGame';
+import { SpeedPicker } from './SpeedPicker';
 import { BLIND_SCHEDULES, DEFAULT_SCHEDULE_ID } from '../engine/blinds';
 import { SCENARIOS } from '../scenarios/scenarios';
 import type { Scenario } from '../scenarios/scenarios';
@@ -8,9 +11,16 @@ import { SCENARIO_STRATEGIES } from '../scenarios/strategy';
 import { StrategyGuide } from './StrategyGuide';
 import { TrainingHub } from './TrainingHub';
 
-export function SetupScreen({ onStart }: { onStart: (setup: GameSetup) => void }) {
-  const [entered, setEntered] = useState(false);
-  const [mode, setMode] = useState<'quick' | 'scenario' | 'train'>('quick');
+export function SetupScreen({
+  onStart,
+  openDrill,
+}: {
+  onStart: (setup: GameSetup) => void;
+  /** Open straight onto this training drill (skipping the splash). */
+  openDrill?: DrillId;
+}) {
+  const [entered, setEntered] = useState(!!openDrill);
+  const [mode, setMode] = useState<'quick' | 'scenario' | 'train'>(openDrill ? 'train' : 'quick');
   // Kept as strings so the fields can be cleared while typing (a numeric state
   // floored at the min would otherwise pin them at "0" and refuse to empty).
   const [numPlayers, setNumPlayers] = useState('6');
@@ -90,7 +100,7 @@ export function SetupScreen({ onStart }: { onStart: (setup: GameSetup) => void }
           </div>
 
           {mode === 'train' ? (
-            <TrainingHub />
+            <TrainingHub initialDrill={openDrill} />
           ) : mode === 'scenario' ? (
             <div className="space-y-2.5">
               {SCENARIOS.map((s) => (
@@ -238,6 +248,8 @@ function QuickGameForm({
   setAutoAdvanceDefault: (v: boolean) => void;
   onStart: (setup: GameSetup) => void;
 }) {
+  // Remembered between games (also changeable mid-game from the ⋯ menu).
+  const [botSpeed, setBotSpeed] = useState<BotSpeed>(loadBotSpeedPref);
   return (
     <>
       <div className="mb-4 grid grid-cols-2 gap-3">
@@ -345,6 +357,17 @@ function QuickGameForm({
           checked={autoAdvanceDefault}
           onChange={setAutoAdvanceDefault}
         />
+        <div className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-2">
+          <span className="block text-sm text-slate-200">Game speed</span>
+          <span className="mb-1.5 block text-xs text-slate-400">How quickly opponents act.</span>
+          <SpeedPicker
+            value={botSpeed}
+            onChange={(v) => {
+              setBotSpeed(v);
+              saveBotSpeedPref(v);
+            }}
+          />
+        </div>
       </div>
 
       <button
@@ -358,6 +381,7 @@ function QuickGameForm({
             coachDefault,
             speechDefault,
             autoAdvanceDefault,
+            botSpeed,
           })
         }
       >

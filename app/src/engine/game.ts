@@ -228,7 +228,11 @@ export class HandEngine {
     const types: ActionType[] = ['fold'];
     if (owed <= 0) {
       types.push('check');
-      if (player.stack > 0) types.push('bet');
+      // Owing nothing doesn't mean there's no bet: the big blind's preflop
+      // "option" after a limp already has a bet (the blind) in front of it,
+      // so putting more in is a raise. Offering "bet" there made the Bet and
+      // All-in buttons silently do nothing (the engine rejects the bet).
+      if (player.stack > 0) types.push(this.currentBet > 0 ? 'raise' : 'bet');
     } else {
       if (player.stack > owed) types.push('call');
       if (player.stack > 0) types.push('raise');

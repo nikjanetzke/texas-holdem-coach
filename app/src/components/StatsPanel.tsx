@@ -58,6 +58,7 @@ export function StatsPanel({ history, leaks }: { history: HandRecord[]; leaks: L
     { label: 'Play or fold by seat', id: 'position' },
     { label: 'Draws & outs', id: 'outs' },
     { label: 'Fold, call or raise', id: 'potodds' },
+    { label: 'Bet sizing', id: 'sizing' },
     { label: 'Your mistakes', id: 'mistakes' },
   ];
 

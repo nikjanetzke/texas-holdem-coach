@@ -35,6 +35,27 @@ describe('generateAdvice', () => {
     expect(advice.suggestedAction).toBe('bet');
   });
 
+  it("big blind's option: suggests raise (the button you'll see), and check with a weak hand", () => {
+    const strong = generateAdvice({
+      holeCards: cards('As Ad'),
+      communityCards: [],
+      numOpponents: 1,
+      potBeforeAction: 20,
+      amountToCall: 0,
+      position: 'Big Blind',
+    });
+    expect(strong.suggestedAction).toBe('raise');
+    const weak = generateAdvice({
+      holeCards: cards('7c 2d'),
+      communityCards: [],
+      numOpponents: 1,
+      potBeforeAction: 20,
+      amountToCall: 0,
+      position: 'Big Blind',
+    });
+    expect(weak.suggestedAction).toBe('check');
+  });
+
   it('warns about a possible flush on a 3-flush board', () => {
     const advice = generateAdvice({
       holeCards: cards('Ac Kd'),

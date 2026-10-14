@@ -4,6 +4,7 @@ import { OutsTrainer } from './OutsTrainer';
 import { PotOddsTrainer } from './PotOddsTrainer';
 import { PositionTrainer } from './PositionTrainer';
 import { MistakesTrainer } from './MistakesTrainer';
+import { SizingTrainer } from './SizingTrainer';
 import { getDrillStats, RECENT_WINDOW } from '../persistence/drillStats';
 import type { DrillId } from '../persistence/drillStats';
 import { loadSession, saveSession } from '../persistence/storage';
@@ -32,12 +33,14 @@ const STATE_BADGE: Record<LevelState, { text: string; cls: string }> = {
   locked: { text: '🔒 Locked', cls: 'bg-slate-800 text-slate-500 ring-slate-700' },
 };
 
-export function TrainingHub() {
+export function TrainingHub({ initialDrill }: { initialDrill?: DrillId } = {}) {
   const stats = useTrainingProgress();
   const [skipAhead, setSkipAhead] = useState(() => loadSession<boolean>(SKIP_KEY) ?? false);
   const states = levelStates(stats, skipAhead);
   const firstOpen = LEVELS[Math.max(0, states.findIndex((s) => s === 'current'))]?.drill ?? 'chen';
-  const [drill, setDrill] = useState<DrillId>(firstOpen);
+  // A specific drill can be requested (e.g. from the end-of-session report's
+  // "Practise this" button) — opened even if the path hasn't reached it yet.
+  const [drill, setDrill] = useState<DrillId>(initialDrill ?? firstOpen);
   const [toast, setToast] = useState<string | null>(null);
   // On a phone the full level list pushes the drill off screen, so it can be
   // folded down to one line; the choice is remembered.
@@ -195,6 +198,8 @@ export function TrainingHub() {
           <OutsTrainer key="outs" />
         ) : drill === 'potodds' ? (
           <PotOddsTrainer key="potodds" />
+        ) : drill === 'sizing' ? (
+          <SizingTrainer key="sizing" />
         ) : (
           <MistakesTrainer key="mistakes" />
         )}

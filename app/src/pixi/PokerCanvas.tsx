@@ -3,6 +3,7 @@ import { Application, Assets, Container, Graphics, Sprite, Text, TextStyle, Text
 import type { Card } from '../engine/deck';
 import type { HandPlayer } from '../engine/game';
 import * as theme from './theme';
+import { SEAT_BOX_H, SEAT_BOX_W, seatPosition, seatScaleFor } from './seatLayout';
 import { drawFace, drawBadge, drawCardBack, drawCardFace, drawChipStack, CARD_W_SM, CARD_H_SM } from './draw';
 
 export interface SeatViewModel {
@@ -28,6 +29,12 @@ export interface PokerCanvasProps {
   handNumber?: number;
   /** IDs of seats that won the pot; triggers the chip-award animation. */
   winnerIds?: string[];
+  /**
+   * The winning five-card hand at a showdown. Those cards are lifted and
+   * outlined in gold, the rest of the board dimmed, so you can SEE what won —
+   * including when a player is just playing the board.
+   */
+  winningCards?: Card[];
   width?: number;
   height?: number;
 }
@@ -36,16 +43,6 @@ function truncateName(name: string, max = 8): string {
   return name.length > max ? `${name.slice(0, max - 1)}…` : name;
 }
 
-function seatPosition(index: number, total: number, w: number, h: number) {
-  const theta = (index / total) * 2 * Math.PI;
-  // Vertical spread kept tight enough that the tall seat boxes at the top and
-  // bottom of the oval stay fully on-canvas (heads no longer clipped).
-  const x = w / 2 + (w * 0.43) * Math.sin(theta);
-  const y = h / 2 + (h * 0.345) * Math.cos(theta);
-  const chipX = x + (w / 2 - x) * 0.32;
-  const chipY = y + (h / 2 - y) * 0.32;
-  return { x, y, chipX, chipY };
-}
 
 function drawFelt(w: number, h: number): Container {
   const c = new Container();
@@ -75,25 +72,15 @@ const LOGICAL_H = 500;
 
 // Seat-box geometry, shared between the seat renderer and the muck/deal
 // animations so the flying cards line up with where the real cards sit.
-const SEAT_BOX_W = 172;
-const SEAT_BOX_H = 158;
+
 const SEAT_CARD_TOP = SEAT_BOX_H / 2 - CARD_H_SM - 8; // top-left y of hole cards within a seat box
 
 function easeOutCubic(t: number): number {
   return 1 - Math.pow(1 - t, 3);
 }
 
-// Shrink seat boxes as the table fills up so 7–10 players don't overlap.
-// (~10% smaller across the board than the first pass, for extra breathing room.)
-function seatScaleFor(total: number): number {
-  if (total <= 6) return 0.92;
-  if (total === 7) return 0.81;
-  if (total === 8) return 0.74;
-  if (total === 9) return 0.67;
-  return 0.61; // 10
-}
 
-export function PokerCanvas({ seats, communityCards, potTotal, handNumber, winnerIds, width = LOGICAL_W, height = LOGICAL_H }: PokerCanvasProps) {
+export function PokerCanvas({ seats, communityCards, potTotal, handNumber, winnerIds, winningCards, width = LOGICAL_W, height = LOGICAL_H }: PokerCanvasProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<Application | null>(null);
   const sceneRef = useRef<Container | null>(null);
@@ -248,9 +235,21 @@ export function PokerCanvas({ seats, communityCards, potTotal, handNumber, winne
     const cardGap = CARD_W_SM + 8;
     const startX = LOGICAL_W / 2 - (communityCards.length * cardGap) / 2 + cardGap / 2;
     const boardY = LOGICAL_H * 0.43; // moved down toward the centre, clear of the top seat
+    const winKeys = new Set((winningCards ?? []).map((c) => `${c.rank}${c.suit}`));
+    const highlighting = winKeys.size > 0;
     communityCards.forEach((card, i) => {
       const card3d = drawCardFace(card, CARD_W_SM, CARD_H_SM);
-      card3d.position.set(startX + i * cardGap - CARD_W_SM / 2, boardY - CARD_H_SM / 2);
+      const x = startX + i * cardGap - CARD_W_SM / 2;
+      let y = boardY - CARD_H_SM / 2;
+      if (highlighting) {
+        if (winKeys.has(`${card.rank}${card.suit}`)) {
+          y -= 6;
+          board.addChild(goldOutline(x, y, CARD_W_SM, CARD_H_SM));
+        } else {
+          card3d.alpha = 0.4;
+        }
+      }
+      card3d.position.set(x, y);
       board.addChild(card3d);
     });
     if (communityCards.length === 0) {
@@ -385,10 +384,19 @@ export function PokerCanvas({ seats, communityCards, potTotal, handNumber, winne
       const ch = CARD_H_SM * shrink;
       const gap = isHuman || showFaces ? cw + 6 : cw * 0.5;
       const cardY = boxH / 2 - ch - 8;
+      const winHighlight = seat.isWinner && showFaces && (winningCards?.length ?? 0) > 0;
+      const winSet = new Set((winningCards ?? []).map((c) => `${c.rank}${c.suit}`));
       for (let i = 0; i < 2; i++) {
         const card = player.holeCards[i];
         const node = showFaces && card ? drawCardFace(card, cw, ch) : drawCardBack(cw, ch);
-        node.position.set((i === 0 ? -gap / 2 : gap / 2) - cw / 2, cardY);
+        const x = (i === 0 ? -gap / 2 : gap / 2) - cw / 2;
+        // On the winning seat, mark which hole cards were part of the winning
+        // five; a dimmed card didn't play (both dimmed = the board won it).
+        if (winHighlight && card) {
+          if (winSet.has(`${card.rank}${card.suit}`)) cardsContainer.addChild(goldOutline(x, cardY, cw, ch));
+          else node.alpha = 0.45;
+        }
+        node.position.set(x, cardY);
         cardsContainer.addChild(node);
       }
       c.addChild(cardsContainer);
@@ -650,7 +658,13 @@ export function PokerCanvas({ seats, communityCards, potTotal, handNumber, winne
       console.error('PokerCanvas render error', err);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [seats, communityCards, potTotal, width, height]);
+  }, [seats, communityCards, potTotal, width, height, winningCards]);
 
   return <div ref={hostRef} style={{ width, height }} />;
+}
+
+function goldOutline(x: number, y: number, w: number, h: number): Graphics {
+  const g = new Graphics();
+  g.roundRect(x - 3, y - 3, w + 6, h + 6, 8).fill({ color: theme.WINNER_GOLD, alpha: 0.35 }).stroke({ width: 2.5, color: theme.WINNER_GOLD });
+  return g;
 }

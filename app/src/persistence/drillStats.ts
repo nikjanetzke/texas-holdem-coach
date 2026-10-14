@@ -2,7 +2,7 @@ import { loadSession, notifyTrainingProgress, saveSession } from './storage';
 
 // Persisted accuracy for each training drill, so the stats dashboard can show
 // progress over time (survives reloads).
-export type DrillId = 'chen' | 'position' | 'outs' | 'potodds' | 'mistakes';
+export type DrillId = 'chen' | 'position' | 'outs' | 'potodds' | 'sizing' | 'mistakes';
 
 export interface DrillRecord {
   correct: number;
@@ -21,7 +21,14 @@ export const RECENT_WINDOW = 20;
 
 const KEY = 'texas-holdem-coach:drillstats:v1';
 const blank = (): DrillRecord => ({ correct: 0, total: 0, recent: [] });
-const EMPTY = (): DrillStats => ({ chen: blank(), position: blank(), outs: blank(), potodds: blank(), mistakes: blank() });
+const EMPTY = (): DrillStats => ({
+  chen: blank(),
+  position: blank(),
+  outs: blank(),
+  potodds: blank(),
+  sizing: blank(),
+  mistakes: blank(),
+});
 
 export function getDrillStats(): DrillStats {
   return { ...EMPTY(), ...(loadSession<DrillStats>(KEY) ?? {}) };

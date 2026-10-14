@@ -19,6 +19,7 @@ export const LEVELS: Level[] = [
   { drill: 'position', title: 'Play or fold by seat', skill: 'Know which hands to play from early, middle and late seats.' },
   { drill: 'outs', title: 'Draws & outs', skill: 'Count the cards that improve your hand, and your % to hit.' },
   { drill: 'potodds', title: 'Fold, call or raise', skill: 'Compare your chances with the price to decide what to do.' },
+  { drill: 'sizing', title: 'Bet sizing', skill: 'Choose how much to bet with a strong hand, depending on the board.' },
 ];
 
 export interface LevelProgress {

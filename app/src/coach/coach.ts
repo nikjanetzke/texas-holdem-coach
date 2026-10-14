@@ -173,9 +173,17 @@ export function generateAdvice(input: CoachAdviceInput): CoachAdvice {
       warnings.push('Be careful chasing a weak draw against a large bet — the cost to continue is high relative to your actual winning chances.');
     }
   } else {
-    if (equity > 0.55) {
+    if (equity > 0.55 && preflop) {
+      // Nothing to call before the flop = you're the big blind and everyone
+      // just called. Your blind already counts as a bet, so adding more is a raise.
+      suggestedAction = 'raise';
+      reasoning.push('Everyone just called your big blind and your hand is strong — raise to build the pot (your blind already counts as a bet, so putting more in is called a raise).');
+    } else if (equity > 0.55) {
       suggestedAction = 'bet';
       reasoning.push('Nobody has bet yet and your hand is strong enough to bet for value and build the pot.');
+    } else if (preflop) {
+      suggestedAction = 'check';
+      reasoning.push('Your hand is not strong enough to raise here — checking lets you see the flop for free, since your big blind already covers the price.');
     } else {
       suggestedAction = 'check';
       reasoning.push('Your hand is not strong enough to bet profitably here, so checking keeps the pot small.');

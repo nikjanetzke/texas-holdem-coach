@@ -212,6 +212,7 @@ describe('training path', () => {
       position: rec(o.position ?? []),
       outs: rec(o.outs ?? []),
       potodds: rec(o.potodds ?? []),
+      sizing: rec(o.sizing ?? []),
       mistakes: rec([]),
     }) as DrillStats;
   const good = Array(20).fill(1);
@@ -223,18 +224,18 @@ describe('training path', () => {
   });
 
   it('a fresh player starts on level 1 with the rest locked', () => {
-    expect(levelStates(stats({}), false)).toEqual(['current', 'locked', 'locked', 'locked']);
+    expect(levelStates(stats({}), false)).toEqual(['current', 'locked', 'locked', 'locked', 'locked']);
   });
 
   it('mastering a level unlocks the next', () => {
-    expect(levelStates(stats({ chen: good }), false)).toEqual(['mastered', 'current', 'locked', 'locked']);
+    expect(levelStates(stats({ chen: good }), false)).toEqual(['mastered', 'current', 'locked', 'locked', 'locked']);
   });
 
   it('skipping ahead opens everything but still recommends the first unmastered level', () => {
-    expect(levelStates(stats({}), true)).toEqual(['current', 'open', 'open', 'open']);
+    expect(levelStates(stats({}), true)).toEqual(['current', 'open', 'open', 'open', 'open']);
   });
 
   it('has the levels in teaching order', () => {
-    expect(LEVELS.map((l) => l.drill)).toEqual(['chen', 'position', 'outs', 'potodds']);
+    expect(LEVELS.map((l) => l.drill)).toEqual(['chen', 'position', 'outs', 'potodds', 'sizing']);
   });
 });

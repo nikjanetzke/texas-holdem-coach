@@ -85,4 +85,31 @@ describe('decideAIAction', () => {
     }
     expect(continued).toBeGreaterThan(runs / 2);
   });
+
+  it("on the big blind's option a bot raises (never an illegal 'bet') with a strong hand", () => {
+    let raises = 0;
+    for (let seed = 1; seed <= 20; seed++) {
+      const d = decideAIAction({
+        holeCards: cards('Ah As'),
+        communityCards: [],
+        numOpponents: 1,
+        potBeforeAction: 20,
+        amountToCall: 0,
+        stack: 990,
+        currentBet: 10,
+        minRaiseTo: 20,
+        validActions: ['fold', 'check', 'raise'],
+        profile: AI_ARCHETYPES.looseAggressive,
+        bigBlind: 10,
+        rng: seededRng(seed),
+      });
+      expect(d.type).not.toBe('bet');
+      if (d.type === 'raise') {
+        raises++;
+        expect(d.amount!).toBeGreaterThanOrEqual(20);
+        expect(d.amount!).toBeLessThanOrEqual(1000);
+      }
+    }
+    expect(raises).toBeGreaterThan(10);
+  });
 });

@@ -280,4 +280,60 @@ describe('HandEngine', () => {
     // And the refund really did reach the player's stack.
     expect(engine.players.find((p) => p.id === 'big')!.stack).toBeGreaterThanOrEqual(2500);
   });
+
+  it("big blind's option after limps: offers raise (not bet), and raising and all-in both work", () => {
+    const make = () =>
+      new HandEngine({
+        players: [
+          { id: 'a', name: 'A', stack: 1000 },
+          { id: 'b', name: 'B', stack: 1000 },
+          { id: 'c', name: 'C', stack: 1000 },
+        ],
+        dealerSeat: 0,
+        smallBlind: 5,
+        bigBlind: 10,
+        rng: fixedRng(3),
+      });
+    const limpToBigBlind = (engine: HandEngine) => {
+      engine.act('a', 'call', 10);
+      engine.act('b', 'call', 10);
+      expect(engine.getCurrentActorId()).toBe('c');
+    };
+
+    const engine = make();
+    limpToBigBlind(engine);
+    const valid = engine.getValidActions('c');
+    expect(valid.types).toContain('check');
+    expect(valid.types).toContain('raise');
+    expect(valid.types).not.toContain('bet'); // the blind is already a bet
+    engine.act('c', 'raise', 40);
+    expect(engine.players[2].streetContributed).toBe(40);
+    expect(engine.getCurrentActorId()).toBe('a'); // action reopens to the limpers
+
+    const shove = make();
+    limpToBigBlind(shove);
+    const v = shove.getValidActions('c');
+    shove.act('c', 'raise', v.maxRaiseTo); // what the All-in button sends
+    expect(shove.players[2].allIn).toBe(true);
+  });
+
+  it('a street with no bet yet still offers bet (not raise)', () => {
+    const engine = new HandEngine({
+      players: [
+        { id: 'a', name: 'A', stack: 1000 },
+        { id: 'b', name: 'B', stack: 1000 },
+      ],
+      dealerSeat: 0,
+      smallBlind: 5,
+      bigBlind: 10,
+      rng: fixedRng(5),
+    });
+    const first = engine.getCurrentActorId()!;
+    engine.act(first, 'call', 10);
+    engine.act(engine.getCurrentActorId()!, 'check');
+    expect(engine.street).toBe('flop');
+    const v = engine.getValidActions(engine.getCurrentActorId()!);
+    expect(v.types).toContain('bet');
+    expect(v.types).not.toContain('raise');
+  });
 });

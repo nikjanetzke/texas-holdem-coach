@@ -13,6 +13,9 @@ import { BLIND_SCHEDULES, DEFAULT_SCHEDULE_ID, levelAt } from '../engine/blinds'
 import type { BlindLevel } from '../engine/blinds';
 import type { LuckBand } from '../engine/preflop';
 import { classifyMistake, saveMistake } from '../training/mistakes';
+import type { MistakeKind } from '../training/mistakes';
+import { sizingNote } from '../training/sizingDrill';
+import { buildSessionReport, type SessionHand } from '../training/sessionReport';
 
 export interface SeatConfig {
   id: string;
@@ -36,6 +39,8 @@ export interface GameSetup {
   coachDefault?: boolean;
   speechDefault?: boolean;
   autoAdvanceDefault?: boolean;
+  /** How quickly the computer opponents act. Defaults to the last choice made. */
+  botSpeed?: BotSpeed;
 }
 
 export interface HandSummaryEntry {
@@ -45,6 +50,8 @@ export interface HandSummaryEntry {
   thinkMs: number;
   /** True if this decision was a clear-cut error saved to "Practise your mistakes". */
   savedToDrill?: boolean;
+  /** Extra coaching for this decision, e.g. a bet-sizing tip. */
+  note?: string;
 }
 
 // One human decision's think-time and the context it was made in, captured for
@@ -94,10 +101,24 @@ interface SavedSession {
   levelIndex: number;
 }
 
-// Bots act after a random delay in this range so the table doesn't feel robotic
-// and a human player can't infer anything from a fixed AI response time.
-const BOT_DELAY_MIN_MS = 800;
-const BOT_DELAY_MAX_MS = 3200;
+// Bots act after a random delay in a range so the table doesn't feel robotic
+// and a human player can't infer anything from a fixed AI response time. The
+// range is the player's choice: at a 6-9 player table the default could mean
+// 15+ seconds of waiting between your own decisions.
+export type BotSpeed = 'relaxed' | 'normal' | 'fast';
+export const BOT_DELAYS: Record<BotSpeed, [number, number]> = {
+  relaxed: [1500, 4000],
+  normal: [800, 3200],
+  fast: [250, 900],
+};
+const BOT_SPEED_KEY = 'texas-holdem-coach:pref:bot-speed:v1';
+export function saveBotSpeedPref(s: BotSpeed): void {
+  saveSession(s, BOT_SPEED_KEY);
+}
+export function loadBotSpeedPref(): BotSpeed {
+  const v = loadSession<BotSpeed>(BOT_SPEED_KEY);
+  return v === 'relaxed' || v === 'fast' || v === 'normal' ? v : 'normal';
+}
 
 function sessionKey(setup: GameSetup): string {
   return setup.seats.map((s) => s.id).join(',');
@@ -119,6 +140,45 @@ export function pickRestorableSession(
   const activeCount = setup.seats.filter((s) => (saved.stacks[s.id] ?? 0) > 0).length;
   if (activeCount < 2) return null;
   return saved;
+}
+
+// One computer player's decision, applied to the engine. Shared by the normal
+// timed bot turn and by fast-forwarding a hand the human has skipped.
+function playBotTurn(engine: HandEngine, actorId: string, profile: AIProfile, bigBlind: number): void {
+  const player = engine.players.find((p) => p.id === actorId)!;
+  const valid = engine.getValidActions(actorId);
+  const numOpponents = engine.players.filter((p) => !p.folded && !p.sittingOut && p.id !== actorId).length;
+  // Where this bot sits in the action order (0 = first to act, 1 = last),
+  // so the AI can play tighter early and steal/bluff more in late position.
+  const live = engine.actingOrder.filter((si) => !engine.players[si].folded && !engine.players[si].sittingOut);
+  const posIdx = live.findIndex((si) => engine.players[si].id === actorId);
+  const positionFraction = live.length > 1 && posIdx >= 0 ? posIdx / (live.length - 1) : 0.5;
+  const potTotal = engine.players.reduce((sum, p) => sum + p.totalContributed, 0);
+  const decision = decideAIAction({
+    holeCards: player.holeCards,
+    communityCards: engine.communityCards,
+    numOpponents: Math.max(1, numOpponents),
+    potBeforeAction: potTotal - player.streetContributed,
+    amountToCall: valid.callAmount,
+    stack: player.stack,
+    currentBet: engine.currentBet,
+    minRaiseTo: valid.minRaiseTo,
+    validActions: valid.types,
+    profile,
+    positionFraction,
+    bigBlind,
+  });
+  // Both the decision and the fallback are guarded: an exception escaping a
+  // timer callback would skip the re-render and look like a silent freeze.
+  try {
+    try {
+      engine.act(actorId, decision.type, decision.amount);
+    } catch {
+      engine.act(actorId, valid.types.includes('check') ? 'check' : 'fold');
+    }
+  } catch (err) {
+    console.error('Bot action failed for', actorId, err);
+  }
 }
 
 // The coach's read of the human's CURRENT decision, computed straight from the
@@ -176,6 +236,22 @@ export function useGame(setup: GameSetup) {
   // When their turn arrives it auto-executes if still legal, else is discarded.
   const [queuedAction, setQueuedAction] = useState<ActionType | null>(null);
   const leakTracker = useRef(LeakTracker.fromJSON(initialSaved?.leakCounts));
+  const [botSpeed, setBotSpeedState] = useState<BotSpeed>(() => setup.botSpeed ?? loadBotSpeedPref());
+  const botSpeedRef = useRef(botSpeed);
+  botSpeedRef.current = botSpeed;
+  const setBotSpeed = useCallback((s: BotSpeed) => {
+    setBotSpeedState(s);
+    saveBotSpeedPref(s);
+  }, []);
+  // This sitting only — feeds the end-of-session report. A restored game's
+  // earlier hands and decisions belong to a previous session and don't count.
+  const sessionRef = useRef({
+    startHandNumber: initialSaved?.handNumber ?? 1,
+    startStack: (initialSaved?.stacks ?? {})['human'] ?? setup.seats.find((s) => s.id === 'human')?.stack ?? setup.startingStack,
+    scores: [] as number[],
+    mistakes: { freefold: 0, overfold: 0, overcall: 0 } as Record<MistakeKind, number>,
+    smallValueBets: 0,
+  });
   const [, forceRender] = useState(0);
 
   // Tournament blind clock. The level index persists across reloads, but the level
@@ -248,6 +324,14 @@ export function useGame(setup: GameSetup) {
   const seatConfigById = useMemo(() => Object.fromEntries(setup.seats.map((s) => [s.id, s])), [setup.seats]);
 
   const currentActorId = engine?.getCurrentActorId() ?? null;
+  // Increments on EVERY action, including checks. Effects that wait for "the
+  // next decision" must key on this, not just on who's acting and the pot:
+  // when a player checks to close one street and is also first to act on the
+  // next (e.g. the big blind heads-up, or whenever the small blind has
+  // folded), neither the actor nor the pot changes. Keyed only on those, the
+  // bot never got a turn scheduled and the table froze forever — the
+  // long-standing "game hangs on a bot's turn" bug.
+  const actionCount = engine?.actionLog.length ?? 0;
 
   const computeAdviceForHuman = useCallback(() => {
     if (!engine || !currentActorId || currentActorId !== 'human') {
@@ -255,7 +339,7 @@ export function useGame(setup: GameSetup) {
       return;
     }
     setAdvice(adviceForHumanSpot(engine));
-  }, [engine, currentActorId, potTotal, setup.seats, stacks]);
+  }, [engine, currentActorId, potTotal, setup.seats, stacks, actionCount]);
 
   useEffect(() => {
     computeAdviceForHuman();
@@ -271,7 +355,7 @@ export function useGame(setup: GameSetup) {
       setActionDeadline(null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentActorId, engine]);
+  }, [currentActorId, engine, actionCount]);
   const actionSecondsLeft = actionDeadline != null ? Math.max(0, Math.ceil((actionDeadline - nowTick) / 1000)) : null;
 
   // Drive AI turns automatically.
@@ -283,67 +367,41 @@ export function useGame(setup: GameSetup) {
     if (!seat || !seat.profile) return;
 
     const timer = setTimeout(() => {
-      const player = engine.players.find((p) => p.id === actorId)!;
-      const valid = engine.getValidActions(actorId);
-      const numOpponents = engine.players.filter((p) => !p.folded && !p.sittingOut && p.id !== actorId).length;
-      // Where this bot sits in the action order (0 = first to act, 1 = last),
-      // so the AI can play tighter early and steal/bluff more in late position.
-      const live = engine.actingOrder.filter((si) => !engine.players[si].folded && !engine.players[si].sittingOut);
-      const posIdx = live.findIndex((si) => engine.players[si].id === actorId);
-      const positionFraction = live.length > 1 && posIdx >= 0 ? posIdx / (live.length - 1) : 0.5;
-      const decision = decideAIAction({
-        holeCards: player.holeCards,
-        communityCards: engine.communityCards,
-        numOpponents: Math.max(1, numOpponents),
-        potBeforeAction: potTotal - player.streetContributed,
-        amountToCall: valid.callAmount,
-        stack: player.stack,
-        currentBet: engine.currentBet,
-        minRaiseTo: valid.minRaiseTo,
-        validActions: valid.types,
-        profile: seat.profile!,
-        positionFraction,
-        bigBlind: currentLevel.bigBlind,
-      });
-      // The fallback act() call here was itself unguarded: if the engine's
-      // state had already moved on by the time this timer fired (e.g. a race
-      // with another update), that call could ALSO throw — and since nothing
-      // after it was wrapped, the exception would escape the setTimeout
-      // callback entirely, skipping forceRender(). No error dialog, no
-      // crash — just a UI that stops updating while the JS engine itself is
-      // fine, which looks exactly like a silent freeze. The try/finally below
-      // guarantees a re-render happens regardless of what these calls do, so
-      // the UI can never get stuck silently even if both actions fail.
+      // The hand may have moved on without us (e.g. fast-forwarded by a skip).
+      if (engine.isHandOver() || engine.getCurrentActorId() !== actorId) {
+        forceRender((n) => n + 1); // re-render so the right turn gets scheduled
+        return;
+      }
       try {
-        try {
-          engine.act(actorId, decision.type, decision.amount);
-        } catch {
-          engine.act(actorId, valid.types.includes('check') ? 'check' : 'fold');
-        }
-      } catch (err) {
-        console.error('Bot action failed for', actorId, err);
+        playBotTurn(engine, actorId, seat.profile!, currentLevel.bigBlind);
       } finally {
         forceRender((n) => n + 1);
       }
-    }, BOT_DELAY_MIN_MS + Math.random() * (BOT_DELAY_MAX_MS - BOT_DELAY_MIN_MS));
+    }, (() => {
+      // Read via ref so changing speed mid-hand applies to the next bot without
+      // re-scheduling (and re-rolling) the one already thinking.
+      const [min, max] = BOT_DELAYS[botSpeedRef.current];
+      return min + Math.random() * (max - min);
+    })());
 
     return () => clearTimeout(timer);
-    // currentActorId is the key trigger: it advances after every bot action
-    // (including checks/folds that leave potTotal unchanged), re-scheduling the
-    // next actor. eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [engine, currentActorId, potTotal, seatConfigById]);
+    // actionCount is the key trigger: it advances after every action, so the
+    // next turn is always scheduled — even when the same bot acts again with
+    // an unchanged pot (see actionCount above).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [engine, currentActorId, potTotal, seatConfigById, actionCount]);
 
   // When a hand reaches showdown, settle stacks and record history exactly once.
   // This runs on every render (no dep array) because `engine` mutates in place and
   // `forceRender` ticks don't change any dependency the effect could key off of —
   // the settledEngineRef guard is what makes this idempotent.
   const settledEngineRef = useRef<HandEngine | null>(null);
-  useEffect(() => {
-    if (!engine || !engine.isHandOver() || settledEngineRef.current === engine) return;
-    settledEngineRef.current = engine;
+  const settleHand = (eng: HandEngine) => {
+    if (!eng.isHandOver() || settledEngineRef.current === eng) return;
+    settledEngineRef.current = eng;
 
     const newStacks: Record<string, number> = {};
-    for (const p of engine.players) newStacks[p.id] = p.stack;
+    for (const p of eng.players) newStacks[p.id] = p.stack;
     // Update the ref synchronously so a nextHand() in this same tick reads the
     // credited (post-win) stacks even before the setStacks re-render lands.
     stacksRef.current = { ...stacksRef.current, ...newStacks };
@@ -353,13 +411,16 @@ export function useGame(setup: GameSetup) {
     const record: HandRecord = {
       handNumber,
       dealerSeat,
-      players: engine.players.map((p: HandPlayer) => ({ id: p.id, name: p.name, holeCards: p.holeCards })),
-      communityCards: engine.communityCards,
-      actionLog: engine.actionLog,
-      showdownResult: engine.showdownResult,
+      players: eng.players.map((p: HandPlayer) => ({ id: p.id, name: p.name, holeCards: p.holeCards })),
+      communityCards: eng.communityCards,
+      actionLog: eng.actionLog,
+      showdownResult: eng.showdownResult,
       decisionTimings: [...currentHandTimingsRef.current],
     };
     setHandHistory((prev) => [record, ...prev].slice(0, MAX_HAND_HISTORY));
+  };
+  useEffect(() => {
+    if (engine) settleHand(engine);
   });
 
   // Persist session state to localStorage whenever it changes meaningfully.
@@ -389,6 +450,8 @@ export function useGame(setup: GameSetup) {
     // would make a saved mistake show a board the decision was never made on.
     const holeCardsBefore = [...player.holeCards];
     const boardBefore = [...engine.communityCards];
+    const potBeforeAct = engine.players.reduce((sum, p) => sum + p.totalContributed, 0);
+    const stackBeforeAct = player.stack + player.streetContributed;
     // The coach's advice is computed in an effect that runs AFTER the screen
     // paints. A fast click — or a pre-pressed action, which fires the instant
     // the turn starts — could land before it, and was then scored against no
@@ -463,11 +526,20 @@ export function useGame(setup: GameSetup) {
             savedAt: Date.now(),
           });
           savedToDrill = true;
+          sessionRef.current.mistakes[kind]++;
         }
       }
+      sessionRef.current.scores.push(result.score);
+      // Bet sizing: a strong hand bet small on a board full of draws. An
+      // all-in isn't a sizing choice (a short stack may simply be all there is).
+      const note =
+        type === 'bet' && amount != null && amount < stackBeforeAct
+          ? sizingNote({ board: boardBefore, betAmount: amount, potBefore: potBeforeAct, equityPercent: advice.equityPercent })
+          : null;
+      if (note) sessionRef.current.smallValueBets++;
       setHandSummary((prev) => [
         ...(prev ?? []),
-        { playerId: 'human', score: result.score, explanation: result.explanation, thinkMs, savedToDrill },
+        { playerId: 'human', score: result.score, explanation: result.explanation, thinkMs, savedToDrill, note: note ?? undefined },
       ]);
     }
     forceRender((n) => n + 1);
@@ -503,6 +575,21 @@ export function useGame(setup: GameSetup) {
   }, [actionSecondsLeft, currentActorId, engine]);
 
   const nextHand = useCallback(() => {
+    // Skipping ahead after folding used to ABANDON the unfinished hand: the
+    // next hand was built from the stacks as they were before it, so chips the
+    // player had already put in (blinds, a call before folding) were quietly
+    // refunded, the bots' pot was voided, and the hand never reached history
+    // (overstating VPIP and undercounting hands). Instead, play out the
+    // remaining computer decisions instantly and settle the hand properly.
+    if (engine && !engine.isHandOver()) {
+      for (let guard = 0; guard < 500 && !engine.isHandOver(); guard++) {
+        const id = engine.getCurrentActorId();
+        const profile = id ? seatConfigById[id]?.profile : undefined;
+        if (!id || id === 'human' || !profile) break; // never decide for the player
+        playBotTurn(engine, id, profile, currentLevel.bigBlind);
+      }
+      settleHand(engine);
+    }
     // Blinds escalate at the hand boundary once the level timer has expired.
     if (!isLastLevel && Date.now() - levelStartedAtRef.current >= levelMs) {
       const newIndex = levelIndexRef.current + 1;
@@ -514,9 +601,40 @@ export function useGame(setup: GameSetup) {
     setDealerSeat(nextDealer);
     setHandNumber((n) => n + 1);
     startHand(nextDealer);
-  }, [dealerSeat, setup.seats.length, startHand, isLastLevel, levelMs]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dealerSeat, setup.seats.length, startHand, isLastLevel, levelMs, engine, seatConfigById, currentLevel.bigBlind, handNumber]);
+
+  // End-of-session summary, built from this sitting's hands and decisions.
+  const getSessionReport = useCallback(
+    (currentHumanStack: number) => {
+      const sess = sessionRef.current;
+      const hands: SessionHand[] = handHistory
+        .filter((h) => h.handNumber >= sess.startHandNumber)
+        .map((h) => ({
+          vpip: h.actionLog.some(
+            (a) =>
+              a.playerId === 'human' &&
+              a.street === 'preflop' &&
+              !a.forced &&
+              (a.type === 'call' || a.type === 'raise' || a.type === 'bet' || a.type === 'all-in'),
+          ),
+          won: (h.showdownResult?.payouts['human'] ?? 0) > 0,
+        }));
+      return buildSessionReport({
+        hands,
+        decisionScores: sess.scores,
+        netChips: currentHumanStack - sess.startStack,
+        mistakes: sess.mistakes,
+        smallValueBets: sess.smallValueBets,
+      });
+    },
+    [handHistory],
+  );
 
   return {
+    botSpeed,
+    setBotSpeed,
+    getSessionReport,
     engine,
     potTotal,
     currentActorId,
