@@ -24,3 +24,16 @@ export function clearSession(key: string = DEFAULT_KEY): void {
     // ignore
   }
 }
+
+/**
+ * Tell listeners (the training hub) that drill progress changed. Deferred on
+ * purpose: drills pick their first question inside a useState initializer —
+ * i.e. during render — and that saves progress. Dispatching synchronously
+ * there made the hub update while another component was rendering, which
+ * React rejects ("Cannot update a component while rendering a different
+ * component").
+ */
+export function notifyTrainingProgress(): void {
+  if (typeof window === 'undefined') return;
+  setTimeout(() => window.dispatchEvent(new Event('training-progress')), 0);
+}

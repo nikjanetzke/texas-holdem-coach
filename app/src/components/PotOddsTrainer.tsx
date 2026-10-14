@@ -5,6 +5,12 @@ import type { DrawType } from '../engine/outsDrill';
 import { generateDecisionScenario } from '../engine/decisionDrill';
 import type { DecisionAction, DecisionScenario } from '../engine/decisionDrill';
 import { recordDrillResult } from '../persistence/drillStats';
+import { gradeQuestion, pendingReviews, pickQuestion } from '../training/srs';
+import { ReviewBadge } from './training/PlayingCard';
+
+const DECK = 'potodds';
+const cardKey = (cs: Card[]) => cs.map((c) => `${c.rank}${c.suit}`).join('');
+
 
 // A two-phase drill: first count your outs (exactly like the Draws & Outs
 // trainer — same generators, same verified out counts), THEN decide what to
@@ -37,7 +43,9 @@ type Phase = 'outs' | 'decision';
 
 export function PotOddsTrainer() {
   const [enabled, setEnabled] = useState<DrawType[]>([...ALL_DRAWS]);
-  const [scenario, setScenario] = useState<DecisionScenario>(() => generateDecisionScenario(ALL_DRAWS));
+  const [q, setQ] = useState(() => pickQuestion<DecisionScenario>(DECK, () => generateDecisionScenario(ALL_DRAWS)));
+  const scenario = q.item;
+  const [reviews, setReviews] = useState(() => pendingReviews(DECK));
   const [phase, setPhase] = useState<Phase>('outs');
   const [outsGuess, setOutsGuess] = useState<number | null>(null);
   const [actionGuess, setActionGuess] = useState<DecisionAction | null>(null);
@@ -86,6 +94,17 @@ export function PotOddsTrainer() {
     const speedBonus = timed ? Math.round((timeLeftRef.current / TIME_LIMIT) * 50) : 0;
     const gained = correct ? 50 + speedBonus + stats.streak * 5 : 0;
     recordDrillResult('potodds', correct);
+    // For review purposes the spot only counts as "got it" if BOTH steps were
+    // right — miscounting the outs and lucking into the right action still
+    // deserves another look.
+    const outsRight = outsGuess === scenario.outsScenario.outs;
+    gradeQuestion(
+      DECK,
+      `${cardKey(scenario.outsScenario.hero)}|${cardKey(scenario.outsScenario.board)}|${scenario.potBefore}|${scenario.toCall}`,
+      scenario,
+      correct && outsRight,
+    );
+    setReviews(pendingReviews(DECK));
     setActionGuess(choice);
     setStats((prev) => {
       const streak = correct ? prev.streak + 1 : 0;
@@ -100,7 +119,7 @@ export function PotOddsTrainer() {
   }
 
   function next() {
-    setScenario(generateDecisionScenario(enabled));
+    setQ(pickQuestion<DecisionScenario>(DECK, () => generateDecisionScenario(enabled)));
     setPhase('outs');
     setOutsGuess(null);
     setActionGuess(null);
@@ -125,6 +144,7 @@ export function PotOddsTrainer() {
             {stats.total > 0 && ` (${Math.round((stats.correct / stats.total) * 100)}%)`}
           </div>
           <div className="text-slate-400">🔥 streak {stats.streak} · best {stats.best}</div>
+          {reviews > 0 && <div className="text-indigo-300">🔁 {reviews} to review</div>}
         </div>
         <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-300">
           <span>Timer</span>
@@ -178,6 +198,7 @@ export function PotOddsTrainer() {
         )}
       </div>
 
+      {q.isReview && phase === 'outs' && !outsRevealed && <ReviewBadge />}
       {/* The spot: shown throughout both phases so the cards never disappear. */}
       <div className="rounded-lg border border-slate-700 bg-emerald-950/30 p-3">
         <div className="mb-2 text-center text-xs text-slate-400">{comeDescription(s.cardsToCome)}</div>

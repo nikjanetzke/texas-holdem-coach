@@ -10,6 +10,13 @@ import {
   type DrawType,
 } from '../engine/outsDrill';
 import { recordDrillResult } from '../persistence/drillStats';
+import type { OutsScenario } from '../engine/outsDrill';
+import { gradeQuestion, pendingReviews, pickQuestion } from '../training/srs';
+import { ReviewBadge } from './training/PlayingCard';
+
+const DECK = 'outs';
+const cardKey = (cs: Card[]) => cs.map((c) => `${c.rank}${c.suit}`).join('');
+
 
 const SUIT_CHARS: Record<Card['suit'], string> = { s: '♠', h: '♥', d: '♦', c: '♣' };
 const rankLabel = (r: Card['rank']) => (r === 'T' ? '10' : r);
@@ -27,7 +34,9 @@ function CardFace({ c, small }: { c: Card; small?: boolean }) {
 
 export function OutsTrainer() {
   const [enabled, setEnabled] = useState<DrawType[]>([...ALL_DRAWS]);
-  const [scenario, setScenario] = useState(() => generateOutsScenario(ALL_DRAWS));
+  const [q, setQ] = useState(() => pickQuestion<OutsScenario>(DECK, () => generateOutsScenario(ALL_DRAWS)));
+  const scenario = q.item;
+  const [reviews, setReviews] = useState(() => pendingReviews(DECK));
   const [guess, setGuess] = useState<number | null>(null);
   const [timed, setTimed] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
@@ -58,6 +67,8 @@ export function OutsTrainer() {
     const speedBonus = timed ? Math.round((timeLeftRef.current / TIME_LIMIT) * 50) : 0;
     const gained = correct ? 50 + speedBonus + stats.streak * 5 : 0;
     recordDrillResult('outs', correct);
+    gradeQuestion(DECK, cardKey(scenario.hero) + '|' + cardKey(scenario.board), scenario, correct);
+    setReviews(pendingReviews(DECK));
     setGuess(choice);
     setStats((s) => {
       const streak = correct ? s.streak + 1 : 0;
@@ -72,7 +83,7 @@ export function OutsTrainer() {
   }
 
   function next() {
-    setScenario(generateOutsScenario(enabled));
+    setQ(pickQuestion<OutsScenario>(DECK, () => generateOutsScenario(enabled)));
     setGuess(null);
     setTimeLeft(TIME_LIMIT);
   }
@@ -95,6 +106,7 @@ export function OutsTrainer() {
             {stats.total > 0 && ` (${Math.round((stats.correct / stats.total) * 100)}%)`}
           </div>
           <div className="text-slate-400">🔥 streak {stats.streak} · best {stats.best}</div>
+          {reviews > 0 && <div className="text-indigo-300">🔁 {reviews} to review</div>}
         </div>
         <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-300">
           <span>Timer</span>
@@ -149,6 +161,7 @@ export function OutsTrainer() {
         )}
       </div>
 
+      {q.isReview && <ReviewBadge />}
       {/* The spot */}
       <div className="rounded-lg border border-slate-700 bg-emerald-950/30 p-3">
         <div className="mb-2 text-center text-xs text-slate-400">{comeDescription(scenario.cardsToCome)}</div>

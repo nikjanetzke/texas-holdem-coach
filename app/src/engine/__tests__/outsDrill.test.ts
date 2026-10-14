@@ -18,12 +18,19 @@ function trueOutsCount(hero: Card[], board: Card[], drawType: string): number {
   const heroVals = hero.map((c) => rankValue(c.rank));
   let count = 0;
   for (const cand of remaining) {
-    const after = evaluateBestHand([...hero, ...board, cand]);
+    const fullBoard = [...board, cand];
+    const after = evaluateBestHand([...hero, ...fullBoard]);
     let hit: boolean;
     if (drawType === 'flush') hit = after.rank >= HandRank.Flush;
     else if (drawType === 'oesd' || drawType === 'gutshot') hit = after.rank === HandRank.Straight || after.rank === HandRank.StraightFlush;
     else if (drawType === 'combo') hit = after.rank === HandRank.Straight || after.rank >= HandRank.Flush;
     else hit = after.rank === HandRank.OnePair && heroVals.includes(after.tiebreakers[0]);
+    // Same definition the drill uses: a card that only completes the hand on
+    // the shared board (so the whole table has it) is not an out. Without this
+    // the test disagreed with the generator whenever such a card existed —
+    // e.g. 3h As on 4s 5d 7c 8s: four 2s are real outs (the wheel), but the
+    // four 6s just put 4-5-6-7-8 on the board — and failed at random.
+    if (hit && fullBoard.length >= 5 && compareHandValues(after, evaluateBestHand(fullBoard)) <= 0) hit = false;
     if (hit) count++;
   }
   return count;

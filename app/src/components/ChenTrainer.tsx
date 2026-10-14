@@ -3,6 +3,8 @@ import type { Card } from '../engine/deck';
 import { RANKS, SUITS, shuffle } from '../engine/deck';
 import { chenBreakdown } from '../engine/preflop';
 import { recordDrillResult } from '../persistence/drillStats';
+import { gradeQuestion, pendingReviews, pickQuestion } from '../training/srs';
+import { ReviewBadge } from './training/PlayingCard';
 
 const SUIT_CHARS: Record<Card['suit'], string> = { s: '♠', h: '♥', d: '♦', c: '♣' };
 const rankLabel = (r: Card['rank']) => (r === 'T' ? '10' : r);
@@ -20,13 +22,26 @@ const bandFor = (score: number) => BANDS.find((b) => score >= b.min)!.label;
 
 const TIME_LIMIT = 15; // seconds per hand when the timer is on
 
+// Review identity is the hand CLASS (e.g. "AKs"), not the exact suits: if you
+// misjudge A-K suited, any A-K suited should come back to test it.
+function handClass(cards: Card[]): string {
+  const order = 'AKQJT98765432';
+  const [a, b] = [...cards].sort((x, y) => order.indexOf(x.rank) - order.indexOf(y.rank));
+  if (a.rank === b.rank) return a.rank + b.rank;
+  return a.rank + b.rank + (a.suit === b.suit ? 's' : 'o');
+}
+
+const DECK = 'chen';
+
 function dealHand(): Card[] {
   const deck = shuffle(RANKS.flatMap((rank) => SUITS.map((suit) => ({ rank, suit }))));
   return deck.slice(0, 2);
 }
 
 export function ChenTrainer() {
-  const [hand, setHand] = useState<Card[]>(() => dealHand());
+  const [q, setQ] = useState(() => pickQuestion<Card[]>(DECK, dealHand));
+  const hand = q.item;
+  const [reviews, setReviews] = useState(() => pendingReviews(DECK));
   const [guess, setGuess] = useState<string | null>(null);
   const [timed, setTimed] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
@@ -59,6 +74,8 @@ export function ChenTrainer() {
     const speedBonus = timed ? Math.round((timeLeftRef.current / TIME_LIMIT) * 50) : 0;
     const gained = correct ? 50 + speedBonus + stats.streak * 5 : 0;
     recordDrillResult('chen', correct);
+    gradeQuestion(DECK, handClass(hand), hand, correct);
+    setReviews(pendingReviews(DECK));
     setGuess(choice);
     setStats((s) => {
       const streak = correct ? s.streak + 1 : 0;
@@ -73,7 +90,7 @@ export function ChenTrainer() {
   }
 
   function next() {
-    setHand(dealHand());
+    setQ(pickQuestion<Card[]>(DECK, dealHand));
     setGuess(null);
     setTimeLeft(TIME_LIMIT);
   }
@@ -92,6 +109,7 @@ export function ChenTrainer() {
             {stats.total > 0 && ` (${Math.round((stats.correct / stats.total) * 100)}%)`}
           </div>
           <div className="text-slate-400">🔥 streak {stats.streak} · best {stats.best}</div>
+          {reviews > 0 && <div className="text-indigo-300">🔁 {reviews} to review</div>}
         </div>
         <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-300">
           <span>Timer</span>
@@ -144,6 +162,7 @@ export function ChenTrainer() {
         )}
       </div>
 
+      {q.isReview && <ReviewBadge />}
       <div className="relative flex items-center justify-center gap-3 py-2">
         {timed && !revealed && (
           <span className={`absolute right-2 top-0 font-mono text-sm font-bold ${timeLeft <= 5 ? 'text-rose-400' : 'text-slate-400'}`}>

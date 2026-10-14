@@ -55,8 +55,10 @@ export function StatsPanel({ history, leaks }: { history: HandRecord[]; leaks: L
   const drills = getDrillStats();
   const drillRows: { label: string; id: keyof typeof drills }[] = [
     { label: 'Starting hands', id: 'chen' },
+    { label: 'Play or fold by seat', id: 'position' },
     { label: 'Draws & outs', id: 'outs' },
-    { label: 'Call or fold?', id: 'potodds' },
+    { label: 'Fold, call or raise', id: 'potodds' },
+    { label: 'Your mistakes', id: 'mistakes' },
   ];
 
   if (s.hands === 0) {

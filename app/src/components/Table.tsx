@@ -913,6 +913,9 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: () => void 
                     Decision score {s.score}/10
                   </span>{' '}
                   <span className="text-slate-500">({(s.thinkMs / 1000).toFixed(1)}s)</span> — {s.explanation}
+                  {s.savedToDrill && (
+                    <span className="ml-1 text-indigo-300">📌 Saved to “Practise your mistakes” in Training.</span>
+                  )}
                 </div>
               ))}
             </div>

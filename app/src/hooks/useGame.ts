@@ -12,6 +12,7 @@ import { loadSession, saveSession } from '../persistence/storage';
 import { BLIND_SCHEDULES, DEFAULT_SCHEDULE_ID, levelAt } from '../engine/blinds';
 import type { BlindLevel } from '../engine/blinds';
 import type { LuckBand } from '../engine/preflop';
+import { classifyMistake, saveMistake } from '../training/mistakes';
 
 export interface SeatConfig {
   id: string;
@@ -42,6 +43,8 @@ export interface HandSummaryEntry {
   score: number;
   explanation: string;
   thinkMs: number;
+  /** True if this decision was a clear-cut error saved to "Practise your mistakes". */
+  savedToDrill?: boolean;
 }
 
 // One human decision's think-time and the context it was made in, captured for
@@ -117,6 +120,37 @@ export function pickRestorableSession(
   if (activeCount < 2) return null;
   return saved;
 }
+
+// The coach's read of the human's CURRENT decision, computed straight from the
+// live engine. Used both by the advice effect (for the coach panel) and,
+// synchronously, at the moment the human acts — see humanAct.
+function adviceForHumanSpot(engine: HandEngine): CoachAdvice {
+  const player = engine.players.find((p) => p.id === 'human')!;
+  const valid = engine.getValidActions('human');
+  const numOpponents = engine.players.filter((p) => !p.folded && !p.sittingOut && p.id !== 'human').length;
+  const seatIndexInOrder = engine.actingOrder.findIndex((seatIdx) => engine.players[seatIdx].id === 'human');
+  // Pass the real blind flags — these were hardcoded to false, so the coach
+  // never knew the human was in the blinds and skipped its blind-specific
+  // advice ("you'll act first after the flop...") entirely.
+  const position = classifyPosition(
+    seatIndexInOrder,
+    engine.actingOrder.length,
+    engine.smallBlindId === 'human',
+    engine.bigBlindId === 'human',
+  );
+  const potTotal = engine.players.reduce((sum, p) => sum + p.totalContributed, 0);
+  return generateAdvice({
+    holeCards: player.holeCards,
+    communityCards: engine.communityCards,
+    numOpponents: Math.max(1, numOpponents),
+    potBeforeAction: potTotal - player.streetContributed,
+    amountToCall: valid.callAmount,
+    position,
+  });
+}
+
+const sameCards = (a: Card[], b: Card[]) =>
+  a.length === b.length && a.every((c, i) => c.rank === b[i].rank && c.suit === b[i].suit);
 
 export function useGame(setup: GameSetup) {
   const initialSaved = pickRestorableSession(loadSession<SavedSession & { seatKey: string }>(), setup);
@@ -220,28 +254,7 @@ export function useGame(setup: GameSetup) {
       setAdvice(null);
       return;
     }
-    const player = engine.players.find((p) => p.id === 'human')!;
-    const valid = engine.getValidActions('human');
-    const numOpponents = engine.players.filter((p) => !p.folded && !p.sittingOut && p.id !== 'human').length;
-    const seatIndexInOrder = engine.actingOrder.findIndex((seatIdx) => engine.players[seatIdx].id === 'human');
-    // Pass the real blind flags — these were hardcoded to false, so the coach
-    // never knew the human was in the blinds and skipped its blind-specific
-    // advice ("you'll act first after the flop...") entirely.
-    const position = classifyPosition(
-      seatIndexInOrder,
-      engine.actingOrder.length,
-      engine.smallBlindId === 'human',
-      engine.bigBlindId === 'human',
-    );
-    const result = generateAdvice({
-      holeCards: player.holeCards,
-      communityCards: engine.communityCards,
-      numOpponents: Math.max(1, numOpponents),
-      potBeforeAction: potTotal - player.streetContributed,
-      amountToCall: valid.callAmount,
-      position,
-    });
-    setAdvice(result);
+    setAdvice(adviceForHumanSpot(engine));
   }, [engine, currentActorId, potTotal, setup.seats, stacks]);
 
   useEffect(() => {
@@ -372,6 +385,24 @@ export function useGame(setup: GameSetup) {
     const valid = engine.getValidActions('human');
     const thinkMs = turnStartRef.current != null ? Math.round(performance.now() - turnStartRef.current) : 0;
     const street = engine.street; // capture before act() mutates the engine
+    // Snapshot the spot BEFORE act(): acting can deal the next street, which
+    // would make a saved mistake show a board the decision was never made on.
+    const holeCardsBefore = [...player.holeCards];
+    const boardBefore = [...engine.communityCards];
+    // The coach's advice is computed in an effect that runs AFTER the screen
+    // paints. A fast click — or a pre-pressed action, which fires the instant
+    // the turn starts — could land before it, and was then scored against no
+    // advice (or a previous spot's): never scored, never saved as a mistake.
+    // Use the effect's advice only if it's for exactly this spot; otherwise
+    // compute it now. It's seeded from the spot, so it matches what the coach
+    // panel shows.
+    const spotAdvice =
+      advice &&
+      sameCards(advice.math.holeCards, holeCardsBefore) &&
+      advice.math.boardCards.length === boardBefore.length &&
+      advice.math.amountToCall === valid.callAmount
+        ? advice
+        : adviceForHumanSpot(engine);
 
     try {
       engine.act('human', type, amount ?? (type === 'call' ? valid.callAmount + player.streetContributed : undefined));
@@ -385,11 +416,12 @@ export function useGame(setup: GameSetup) {
       street,
       action: type,
       thinkMs,
-      equityPercent: advice?.equityPercent ?? null,
-      potOddsPercent: advice?.potOddsPercent ?? null,
+      equityPercent: spotAdvice.equityPercent,
+      potOddsPercent: spotAdvice.potOddsPercent,
     });
 
-    if (advice) {
+    {
+      const advice = spotAdvice;
       const result = scoreDecision({
         actualAction: type,
         suggestedAction: advice.suggestedAction,
@@ -404,7 +436,39 @@ export function useGame(setup: GameSetup) {
         potOddsPercent: advice.potOddsPercent,
         position: advice.position,
       });
-      setHandSummary((prev) => [...(prev ?? []), { playerId: 'human', score: result.score, explanation: result.explanation, thinkMs }]);
+      // Save clear-cut errors for the "Practise your mistakes" drill. `advice`
+      // here is spotAdvice, guaranteed to describe this exact decision.
+      let savedToDrill = false;
+      {
+        const kind = classifyMistake({
+          action: type,
+          validTypes: valid.types,
+          callAmount: valid.callAmount,
+          equityPercent: advice.equityPercent,
+          potOddsPercent: advice.potOddsPercent,
+        });
+        if (kind) {
+          saveMistake({
+            kind,
+            holeCards: holeCardsBefore,
+            board: boardBefore,
+            street,
+            pot: advice.math.potBeforeCall,
+            toCall: valid.callAmount,
+            numOpponents: advice.math.numOpponents,
+            position: advice.position,
+            equityPercent: advice.equityPercent,
+            potOddsPercent: advice.potOddsPercent,
+            actualAction: type,
+            savedAt: Date.now(),
+          });
+          savedToDrill = true;
+        }
+      }
+      setHandSummary((prev) => [
+        ...(prev ?? []),
+        { playerId: 'human', score: result.score, explanation: result.explanation, thinkMs, savedToDrill },
+      ]);
     }
     forceRender((n) => n + 1);
   }, [engine, advice]);
