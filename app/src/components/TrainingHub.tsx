@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import { ChenTrainer } from './ChenTrainer';
 import { OutsTrainer } from './OutsTrainer';
 import { PotOddsTrainer } from './PotOddsTrainer';
@@ -11,6 +11,7 @@ import { loadSession, saveSession } from '../persistence/storage';
 import { LEVELS, MASTERY_ACCURACY, levelStates, progressOf, type LevelState } from '../training/path';
 import { MISTAKES_DECK } from '../training/mistakes';
 import { dueCard, loadDeck } from '../training/srs';
+import { useSideLayout } from '../hooks/useSideLayout';
 
 const SKIP_KEY = 'texas-holdem-coach:path:skip-ahead:v1';
 const COLLAPSE_KEY = 'texas-holdem-coach:path:collapsed:v1';
@@ -44,15 +45,19 @@ export function TrainingHub({ initialDrill }: { initialDrill?: DrillId } = {}) {
   const [toast, setToast] = useState<string | null>(null);
   // On a phone the full level list pushes the drill off screen, so it can be
   // folded down to one line; the choice is remembered.
-  const [collapsed, setCollapsed] = useState(() => loadSession<boolean>(COLLAPSE_KEY) ?? false);
+  const [collapsedPref, setCollapsed] = useState(() => loadSession<boolean>(COLLAPSE_KEY) ?? false);
+  // Side by side (laptops) there's room for the whole path next to the drill.
+  const side = useSideLayout();
+  const collapsed = collapsedPref && !side;
   function toggleCollapsed() {
-    const next = !collapsed;
+    const next = !collapsedPref;
     setCollapsed(next);
     saveSession(next, COLLAPSE_KEY);
   }
   function choose(d: DrillId) {
     setDrill(d);
     setToast(null);
+    drillPaneRef.current?.scrollTo({ top: 0 });
   }
 
   const mistakes = loadDeck(MISTAKES_DECK);
@@ -82,12 +87,21 @@ export function TrainingHub({ initialDrill }: { initialDrill?: DrillId } = {}) {
 
   const selectedLevel = LEVELS.findIndex((l) => l.drill === drill);
 
+  // The drill pane scrolls on its own on wide screens. After reading a long
+  // explanation further down, "Next" must open the new question at the top.
+  const drillPaneRef = useRef<HTMLDivElement>(null);
+  function backToTop(e: MouseEvent) {
+    if ((e.target as HTMLElement).closest('[data-next]')) requestAnimationFrame(() => drillPaneRef.current?.scrollTo({ top: 0 }));
+  }
+
   return (
-    <div className="space-y-4">
-      <div>
+    // Wide screens: the path on the left, the drill on the right, each scrolling
+    // on its own. Phones: stacked, with the path foldable to one line.
+    <div className="space-y-4 side:grid side:h-full side:grid-cols-[minmax(280px,340px)_1fr] side:gap-5 side:space-y-0">
+      <div className="side:min-h-0 side:overflow-y-auto side:pr-1">
         <div className="mb-2 flex items-baseline justify-between gap-2">
-          <button onClick={toggleCollapsed} className="text-left text-sm font-semibold text-slate-100" aria-expanded={!collapsed}>
-            {collapsed ? '▸' : '▾'} Your training path
+          <button onClick={toggleCollapsed} disabled={side} className="text-left text-sm font-semibold text-slate-100" aria-expanded={!collapsed}>
+            {side ? '' : collapsed ? '▸ ' : '▾ '}Your training path
             {collapsed && (
               <span className="ml-2 text-xs font-normal text-slate-400">
                 {states.filter((s) => s === 'mastered').length}/{LEVELS.length} mastered
@@ -177,6 +191,7 @@ export function TrainingHub({ initialDrill }: { initialDrill?: DrillId } = {}) {
         )}
       </div>
 
+      <div ref={drillPaneRef} onClickCapture={backToTop} className="space-y-4 side:min-h-0 side:overflow-y-auto side:pr-1">
       {toast && (
         <button
           onClick={() => setToast(null)}
@@ -186,7 +201,7 @@ export function TrainingHub({ initialDrill }: { initialDrill?: DrillId } = {}) {
         </button>
       )}
 
-      <div className="border-t border-slate-800 pt-3">
+      <div className="border-t border-slate-800 pt-3 side:border-t-0 side:pt-0">
         <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">
           {drill === 'mistakes' ? 'Practise your mistakes' : `Level ${selectedLevel + 1} · ${LEVELS[selectedLevel].title}`}
         </div>
@@ -203,6 +218,7 @@ export function TrainingHub({ initialDrill }: { initialDrill?: DrillId } = {}) {
         ) : (
           <MistakesTrainer key="mistakes" />
         )}
+      </div>
       </div>
     </div>
   );

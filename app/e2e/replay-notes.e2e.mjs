@@ -104,7 +104,8 @@ const notes = page.getByRole('dialog', { name: 'Notes on your opponents' });
 check('notes dialog opens', (await notes.count()) === 1);
 const cards = notes.locator('div.rounded-xl.border.p-3');
 const n = await cards.count();
-check('one note per opponent', n === 3, `${n}`);
+// Opponents who've gone bust are left out (they no longer play).
+check('one note per opponent still in the game', n >= 1 && n <= 3, `${n}`);
 let allMatch = true;
 const seen = [];
 for (let i = 0; i < n; i++) {

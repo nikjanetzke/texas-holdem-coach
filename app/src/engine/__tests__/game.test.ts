@@ -223,10 +223,10 @@ describe('HandEngine', () => {
     expect(engine.isHandOver()).toBe(false);
     expect(engine.getCurrentActorId()).toBe('b');
     const valid = engine.getValidActions('b');
-    expect(valid.types).not.toContain('call'); // can't fully call, stack < owed
-    expect(valid.types).toContain('raise'); // all-in for less is offered as a raise
+    expect(valid.types).toEqual(['fold', 'call']); // can't fully call: calling puts everything in
+    expect(valid.callAmount).toBe(511 - 50); // the rest of B's stack
 
-    engine.act('b', 'raise', 511); // B's own all-in for their remaining stack
+    engine.act('b', 'call', valid.callAmount + 50); // B calls all in for less
 
     expect(engine.isHandOver()).toBe(true);
     const b = engine.players.find((p) => p.id === 'b')!;
@@ -336,4 +336,28 @@ describe('HandEngine', () => {
     expect(v.types).toContain('bet');
     expect(v.types).not.toContain('raise');
   });
+
+  it('facing a bet bigger than your stack: call (all in for less), never raise', () => {
+    const engine = new HandEngine({
+      players: [
+        { id: 'big', name: 'Big', stack: 5000 },
+        { id: 'small', name: 'Small', stack: 300 },
+      ],
+      dealerSeat: 0,
+      smallBlind: 5,
+      bigBlind: 10,
+      rng: fixedRng(9),
+    });
+    // Heads-up the dealer (big) is the small blind and acts first preflop.
+    engine.act('big', 'raise', 1000);
+    const v = engine.getValidActions('small');
+    expect(v.types).toEqual(['fold', 'call']);
+    expect(v.callAmount).toBe(290); // everything left after the 10 blind
+    engine.act('small', 'call', v.callAmount + 10);
+    const small = engine.players.find((p) => p.id === 'small')!;
+    expect(small.allIn).toBe(true);
+    expect(small.totalContributed).toBe(300); // every chip went in
+    expect(engine.isHandOver()).toBe(true); // both all in: the board runs out
+  });
 });
+

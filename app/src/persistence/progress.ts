@@ -10,6 +10,8 @@ export interface SessionSummary {
   /** When it was last updated (ms). */
   updatedAt: number;
   hands: number;
+  /** Hands won (missing on sessions saved before it was recorded). */
+  handsWon?: number;
   /** Decisions the coach scored, and their average (null = none yet). */
   decisions: number;
   avgScore: number | null;
@@ -67,4 +69,33 @@ export function compareToRecent(sessions: SessionSummary[], current: { id: numbe
   if (decisions === 0) return null;
   const avg = before.reduce((a, s) => a + (s.avgScore as number) * s.decisions, 0) / decisions;
   return { previousAvg: Math.round(avg * 10) / 10, sessions: before.length, delta: Math.round((current.avgScore - avg) * 10) / 10 };
+}
+
+export interface ProgressTotals {
+  sessions: number;
+  hands: number;
+  handsWon: number | null;
+  decisions: number;
+  avgScore: number | null;
+  netChips: number;
+  vpipPercent: number | null;
+}
+
+/** Everything added up across saved sessions (scores and VPIP weighted by how much each session had). */
+export function progressTotals(sessions: SessionSummary[]): ProgressTotals {
+  const hands = sessions.reduce((a, s) => a + s.hands, 0);
+  const decisions = sessions.reduce((a, s) => a + s.decisions, 0);
+  const scored = sessions.filter((s) => s.avgScore != null && s.decisions > 0);
+  const withVpip = sessions.filter((s) => s.vpipPercent != null && s.hands > 0);
+  const vpipHands = withVpip.reduce((a, s) => a + s.hands, 0);
+  const withWins = sessions.filter((s) => s.handsWon != null);
+  return {
+    sessions: sessions.length,
+    hands,
+    handsWon: withWins.length ? withWins.reduce((a, s) => a + (s.handsWon ?? 0), 0) : null,
+    decisions,
+    avgScore: decisions ? Math.round((scored.reduce((a, s) => a + (s.avgScore as number) * s.decisions, 0) / decisions) * 10) / 10 : null,
+    netChips: sessions.reduce((a, s) => a + s.netChips, 0),
+    vpipPercent: vpipHands ? Math.round(withVpip.reduce((a, s) => a + (s.vpipPercent as number) * s.hands, 0) / vpipHands) : null,
+  };
 }

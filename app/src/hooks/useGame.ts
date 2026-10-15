@@ -464,6 +464,7 @@ export function useGame(setup: GameSetup) {
       id: sess.id,
       updatedAt: Date.now(),
       hands: report.handsPlayed,
+      handsWon: report.handsWon,
       decisions: sess.scores.length,
       avgScore: report.avgScore,
       netChips: report.netChips,

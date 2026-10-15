@@ -53,6 +53,7 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: (practiseDr
     queuedAction,
     queueAction,
     nextHand,
+    stacks,
     handHistory,
     coachEnabled,
     setCoachEnabled,
@@ -165,9 +166,11 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: (practiseDr
   const opponents: OpponentEntry[] = useMemo(
     () =>
       setup.seats
-        .filter((s) => !s.isHuman && s.profile)
+        // Anyone out of chips is out of the game — no read needed (and none
+        // would ever come, since they no longer play hands).
+        .filter((s) => !s.isHuman && s.profile && (stacks[s.id] ?? 1) > 0)
         .map((s) => ({ id: s.id, name: s.name, portrait: s.profile!.portrait ?? s.portrait, read: readOpponent(s.profile!, handHistory, s.id) })),
-    [setup.seats, handHistory],
+    [setup.seats, handHistory, stacks],
   );
   useEffect(() => {
     if (!engine) return;
@@ -186,6 +189,8 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: (practiseDr
         else if (k === 'r' && t.includes('bet')) humanAct('bet', raiseAmount);
         else if (k === 'a' && (t.includes('raise') || t.includes('bet')))
           humanAct(t.includes('raise') ? 'raise' : 'bet', validActions.maxRaiseTo);
+        // Facing a bet that covers you, calling IS going all in.
+        else if (k === 'a' && t.includes('call') && validActions.callAmount >= (me?.stack ?? Infinity)) humanAct('call');
         else return;
         e.preventDefault();
       } else if (k === 'n' && (engine.isHandOver() || me?.folded)) {
@@ -495,7 +500,7 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: (practiseDr
 
   return (
     <div
-      className="mx-auto flex min-h-[100dvh] max-w-5xl flex-col overflow-x-hidden px-3 py-2 sm:px-4"
+      className="mx-auto flex min-h-[100dvh] max-w-5xl flex-col overflow-x-hidden px-3 py-2 sm:px-4 side:h-[100dvh] side:max-w-[1600px] side:overflow-hidden"
       style={{
         paddingTop: 'max(0.5rem, env(safe-area-inset-top))',
         paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))',
@@ -687,9 +692,9 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: (practiseDr
       {/* Side-by-side (table + controls column) only on SHORT landscape screens
           (i.e. phones held sideways). Desktop and portrait stay stacked, which
           looks better and keeps the action buttons always visible. */}
-      <div className="flex min-h-0 flex-1 flex-col gap-2 [@media(max-height:640px)_and_(orientation:landscape)]:flex-row [@media(max-height:640px)_and_(orientation:landscape)]:items-stretch">
+      <div className="flex min-h-0 flex-1 flex-col gap-2 side:flex-row side:items-stretch">
         {/* Felt — hugs the canvas when stacked, fills the cell when side-by-side. */}
-        <div ref={feltRef} className="mx-auto flex w-full max-w-4xl items-center justify-center overflow-hidden [@media(max-height:640px)_and_(orientation:landscape)]:min-h-0 [@media(max-height:640px)_and_(orientation:landscape)]:max-w-none [@media(max-height:640px)_and_(orientation:landscape)]:flex-1">
+        <div ref={feltRef} className="mx-auto flex w-full max-w-4xl items-center justify-center overflow-hidden side:min-h-0 side:max-w-none side:flex-1">
         <PokerCanvas
           width={canvasSize.width}
           height={canvasSize.height}
@@ -735,9 +740,10 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: (practiseDr
         />
         </div>
 
-        {/* Controls/info: a scrollable side column on short landscape screens,
-            full-width below the table otherwise. */}
-        <div className="mx-auto flex w-full max-w-4xl flex-col gap-2 [@media(max-height:640px)_and_(orientation:landscape)]:mx-0 [@media(max-height:640px)_and_(orientation:landscape)]:w-[340px] [@media(max-height:640px)_and_(orientation:landscape)]:max-w-none [@media(max-height:640px)_and_(orientation:landscape)]:shrink-0 [@media(max-height:640px)_and_(orientation:landscape)]:overflow-y-auto">
+        {/* Controls/info: a side column that scrolls on its own on laptops and
+            sideways phones (the page never scrolls there), full-width below
+            the table otherwise. */}
+        <div className="mx-auto flex w-full max-w-4xl flex-col gap-2 side:mx-0 side:w-[340px] side:max-w-none side:shrink-0 side:overflow-y-auto side:pb-2 min-[1200px]:side:w-[390px]">
 
       {/* Starting-hand rating (click to expand) */}
       {coachEnabled && engine.street === 'preflop' && human.holeCards.length === 2 && !isHandOver && (
@@ -752,7 +758,7 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: (practiseDr
         // fall back to the held suggestion so it's still visible.
         if (liveTurn && advice && !coachRevealed) {
           return (
-            <div className="animate-fade-up relative mt-4 flex items-center justify-between gap-3 overflow-hidden rounded-xl border border-indigo-400/25 bg-gradient-to-b from-indigo-950/70 to-slate-950/80 p-3 text-sm text-slate-300 shadow-lg ring-1 ring-white/5">
+            <div className="animate-fade-up relative mt-4 side:mt-0 flex items-center justify-between gap-3 overflow-hidden rounded-xl border border-indigo-400/25 bg-gradient-to-b from-indigo-950/70 to-slate-950/80 p-3 text-sm text-slate-300 shadow-lg ring-1 ring-white/5">
               <div className="pointer-events-none absolute inset-x-6 top-0 h-px bg-gradient-to-r from-transparent via-indigo-400/60 to-transparent" />
               <span>Decide your play first — then check the coach's take.</span>
               <button
@@ -771,7 +777,7 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: (practiseDr
         // the current (finished) board when they don't.
         const staleStreet = !liveTurn && heldAdvice && heldAdvice.street !== engine.street ? heldAdvice.street : null;
         return (
-          <div className="animate-fade-up relative mt-4 overflow-hidden rounded-xl border border-indigo-400/25 bg-gradient-to-b from-indigo-950/70 to-slate-950/80 p-3 text-sm text-slate-200 shadow-lg ring-1 ring-white/5">
+          <div className="animate-fade-up relative mt-4 side:mt-0 overflow-hidden rounded-xl border border-indigo-400/25 bg-gradient-to-b from-indigo-950/70 to-slate-950/80 p-3 text-sm text-slate-200 shadow-lg ring-1 ring-white/5">
             <div className="pointer-events-none absolute inset-x-6 top-0 h-px bg-gradient-to-r from-transparent via-indigo-400/60 to-transparent" />
             <div className="mb-2 flex flex-wrap items-center gap-2">
               <span className="rounded bg-gradient-to-b from-indigo-500 to-indigo-700 px-2 py-0.5 text-xs font-bold uppercase tracking-wide text-white shadow ring-1 ring-indigo-400/40">Coach</span>
@@ -814,7 +820,7 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: (practiseDr
           panel can never push the buttons below the fold. */}
       {!isHandOver && !human.folded && (
         <div
-          className={`animate-fade-up order-first mt-2 rounded-xl border bg-slate-900/90 p-3 ${
+          className={`animate-fade-up order-first mt-2 rounded-xl border bg-slate-900/90 p-3 side:sticky side:top-0 side:z-10 side:mt-0 side:bg-slate-900 ${
             validActions ? 'border-emerald-600/50 ring-1 ring-emerald-500/30' : 'border-slate-700'
           }`}
         >
@@ -910,7 +916,11 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: (practiseDr
               <ActionButton label="Check" tone="neutral" onClick={() => humanAct('check')} />
             )}
             {validActions.types.includes('call') && (
-              <ActionButton label={`Call $${validActions.callAmount.toLocaleString()}`} tone="primary" onClick={() => humanAct('call')} />
+              <ActionButton
+                label={`Call $${validActions.callAmount.toLocaleString()}${validActions.callAmount >= human.stack ? ' (all in)' : ''}`}
+                tone="primary"
+                onClick={() => humanAct('call')}
+              />
             )}
             {validActions.types.includes('bet') && (
               <ActionButton label={`Bet $${raiseAmount.toLocaleString()}`} tone="primary" onClick={() => humanAct('bet', raiseAmount)} />
@@ -937,7 +947,7 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: (practiseDr
 
       {/* Skip ahead once you've folded — no need to watch the bots finish. */}
       {!isHandOver && !validActions && human.folded && (
-        <div className="animate-fade-up mt-4 flex items-center justify-between gap-3 rounded-xl border border-slate-700 bg-slate-900/80 p-3 text-sm text-slate-300">
+        <div className="animate-fade-up mt-4 side:mt-0 flex items-center justify-between gap-3 rounded-xl border border-slate-700 bg-slate-900/80 p-3 text-sm text-slate-300">
           <span>You folded — waiting on the other players.</span>
           <button
             onClick={nextHand}
@@ -950,7 +960,9 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: (practiseDr
 
       {/* Hand result */}
       {isHandOver && engine.showdownResult && (
-        <div className="animate-fade-up mt-4 rounded-xl border border-emerald-600/50 bg-slate-900/80 p-3 text-sm text-slate-200">
+        // order-first: the result (and "Next hand") sits right under the table, or
+        // at the top of the side column — never below a long coach panel.
+        <div className="animate-fade-up order-first mt-4 side:mt-0 rounded-xl border border-emerald-600/50 bg-slate-900/80 p-3 text-sm text-slate-200">
           <div className="mb-1 font-semibold text-emerald-300">Hand result</div>
           {/* Who won, WITH WHAT, and what everyone else held. Previously this
               said only "Name won $X", so on a loss there was no way to see
@@ -1048,7 +1060,7 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: (practiseDr
 
       {/* Leaks */}
       {coachEnabled && leaks.length > 0 && (
-        <div className="mt-4 rounded-xl border border-slate-800 bg-slate-900/50 p-3 text-xs text-slate-400">
+        <div className="mt-4 side:mt-0 rounded-xl border border-slate-800 bg-slate-900/50 p-3 text-xs text-slate-400">
           <div className="mb-1 font-semibold text-slate-300">Leaks to watch</div>
           {leaks.map((l) => (
             <div key={l.leak} className="mt-0.5">
@@ -1365,7 +1377,7 @@ function StartingHandRating({ cards, open, onToggle }: { cards: Card[]; open: bo
   const { label, tone } = chenLabel(score);
   const text = cards.map((c) => `${rankLabel(c.rank)}${SUIT_CHARS[c.suit]}`).join(' ');
   return (
-    <div className="mt-4 rounded-xl border border-slate-700 bg-slate-900/60 text-sm">
+    <div className="mt-4 side:mt-0 rounded-xl border border-slate-700 bg-slate-900/60 text-sm">
       <button onClick={onToggle} className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left">
         <span className="flex items-center gap-2">
           <span className="font-semibold text-slate-200">Starting hand</span>
@@ -1405,7 +1417,7 @@ function QuickBet({ label, onClick }: { label: string; onClick: () => void }) {
   return (
     <button
       onClick={onClick}
-      className="rounded bg-slate-700 px-2 py-1 text-xs font-medium text-slate-200 hover:bg-slate-600"
+      className="whitespace-nowrap rounded bg-slate-700 px-2 py-1 text-xs font-medium text-slate-200 hover:bg-slate-600"
     >
       {label}
     </button>

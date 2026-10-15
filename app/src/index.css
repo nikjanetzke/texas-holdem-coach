@@ -1,5 +1,15 @@
 @import "tailwindcss";
 
+/* "side": screens wide enough to put things side by side instead of stacking
+   them — laptops and desktops (landscape, 1024px+), and phones held sideways
+   (where stacking would push everything off the short screen). On these the
+   app fits the window and scrolls inside panels, never the whole page. */
+@custom-variant side {
+  @media (min-width: 1024px) and (orientation: landscape), (max-height: 640px) and (orientation: landscape) {
+    @slot;
+  }
+}
+
 @layer base {
   body {
     margin: 0;

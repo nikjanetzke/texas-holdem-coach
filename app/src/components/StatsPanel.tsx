@@ -1,7 +1,7 @@
 import { LEAK_TEXT, type Leak } from '../coach/coach';
 import { useMemo } from 'react';
 import type { HandRecord } from '../hooks/useGame';
-import { getDrillStats } from '../persistence/drillStats';
+import { DrillProgress } from './DrillProgress';
 
 interface LeakRow {
   leak: string;
@@ -53,76 +53,53 @@ function computeStats(history: HandRecord[]) {
 
 export function StatsPanel({ history, leaks }: { history: HandRecord[]; leaks: LeakRow[] }) {
   const s = useMemo(() => computeStats(history), [history]);
-  const drills = getDrillStats();
-  const drillRows: { label: string; id: keyof typeof drills }[] = [
-    { label: 'Starting hands', id: 'chen' },
-    { label: 'Play or fold by seat', id: 'position' },
-    { label: 'Draws & outs', id: 'outs' },
-    { label: 'Fold, call or raise', id: 'potodds' },
-    { label: 'Bet sizing', id: 'sizing' },
-    { label: 'Your mistakes', id: 'mistakes' },
-  ];
 
-  if (s.hands === 0) {
-    return (
-      <div className="rounded-lg border border-slate-700 bg-slate-800/40 p-4 text-sm text-slate-400">
-        Play a few hands and the stats will show up here — VPIP, aggression, win rate, your biggest leaks, and drill accuracy.
-      </div>
-    );
-  }
-
+  // Each part shows as soon as it has something to show — training progress
+  // never waits for hands to be played.
   return (
     <div className="space-y-4 text-sm">
       <div>
-        <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Your play ({s.hands} hands)</div>
-        <div className="grid grid-cols-3 gap-2">
-          <StatCard label="VPIP" value={`${s.vpip}%`} hint="entered pot preflop" />
-          <StatCard label="PFR" value={`${s.pfr}%`} hint="raised preflop" />
-          <StatCard label="Won" value={`${s.won}%`} hint="of hands" />
-          <StatCard label="Showdown" value={`${s.showdown}%`} hint="saw showdown" />
-          <StatCard label="Aggression" value={String(s.aggression)} hint="bets+raises ÷ calls" />
-          <StatCard label="Fold to bet" value={`${s.foldToBet}%`} hint="postflop" />
+        <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+          Your play{s.hands > 0 ? ` (${s.hands} hand${s.hands === 1 ? '' : 's'})` : ''}
         </div>
-      </div>
-
-      <div>
-        <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Drill accuracy</div>
-        <div className="space-y-1.5">
-          {drillRows.map((d) => {
-            const rec = drills[d.id];
-            const acc = rec.total ? Math.round((rec.correct / rec.total) * 100) : 0;
-            return (
-              <div key={d.id} className="flex items-center gap-3">
-                <span className="w-32 shrink-0 text-slate-300">{d.label}</span>
-                <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-800">
-                  <div className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-emerald-400" style={{ width: `${acc}%` }} />
-                </div>
-                <span className="w-20 shrink-0 text-right font-mono text-xs text-slate-400">
-                  {rec.total ? `${acc}% (${rec.total})` : '—'}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      <div>
-        <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Biggest leaks</div>
-        {leaks.length === 0 ? (
-          <div className="text-xs text-slate-500">No notable leaks yet — nice discipline.</div>
+        {s.hands === 0 ? (
+          <div className="text-xs text-slate-500">Finish a hand and your playing style shows up here.</div>
         ) : (
-          <div className="space-y-1">
-            {leaks.map((l) => (
-              <div key={l.leak} className="flex items-center justify-between text-xs">
-                <span className="text-rose-300" title={LEAK_TEXT[l.leak as Leak]?.detail}>{LEAK_TEXT[l.leak as Leak]?.title ?? l.leak}</span>
-                <span className="text-slate-400">
-                  {l.count}× ({l.percentOfHands.toFixed(0)}% of decisions)
-                </span>
-              </div>
-            ))}
+          <div className="grid grid-cols-3 gap-2">
+            <StatCard label="Played" value={`${s.vpip}%`} hint="put chips in before the flop (VPIP)" />
+            <StatCard label="Raised first" value={`${s.pfr}%`} hint="raised before the flop (PFR)" />
+            <StatCard label="Won" value={`${s.won}%`} hint="of hands" />
+            <StatCard label="Showdown" value={`${s.showdown}%`} hint="showed your cards at the end" />
+            <StatCard label="Aggression" value={String(s.aggression)} hint="bets+raises per call" />
+            <StatCard label="Fold to bet" value={`${s.foldToBet}%`} hint="after the flop" />
           </div>
         )}
       </div>
+
+      <div>
+        <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Training</div>
+        <DrillProgress />
+      </div>
+
+      {s.hands > 0 && (
+        <div>
+          <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Biggest leaks</div>
+          {leaks.length === 0 ? (
+            <div className="text-xs text-slate-500">No notable leaks yet — nice discipline.</div>
+          ) : (
+            <div className="space-y-1">
+              {leaks.map((l) => (
+                <div key={l.leak} className="flex items-center justify-between text-xs">
+                  <span className="text-rose-300" title={LEAK_TEXT[l.leak as Leak]?.detail}>{LEAK_TEXT[l.leak as Leak]?.title ?? l.leak}</span>
+                  <span className="text-slate-400">
+                    {l.count}× ({l.percentOfHands.toFixed(0)}% of decisions)
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

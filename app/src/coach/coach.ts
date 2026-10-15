@@ -267,6 +267,14 @@ export function generateAdvice(input: CoachAdviceInput): CoachAdvice {
     }
   }
 
+  // Facing a bet that covers your whole stack there's nothing left to raise
+  // with: continuing means calling, all in.
+  if (facingBet && input.stackBehind != null && input.amountToCall >= input.stackBehind && suggestedAction === 'raise') {
+    suggestedAction = 'call';
+    allIn = false;
+    reasoning.push(`Their bet covers all your chips, so you can't raise — but your hand is strong enough to call, all in.`);
+  }
+
   // The line that explains the suggestion itself (pushed last by the decision logic above).
   const why = reasoning[reasoning.length - 1];
 

@@ -10,6 +10,8 @@ import type { Scenario } from '../scenarios/scenarios';
 import { SCENARIO_STRATEGIES } from '../scenarios/strategy';
 import { StrategyGuide } from './StrategyGuide';
 import { TrainingHub } from './TrainingHub';
+import { StatsView } from './StatsView';
+import { useSideLayout } from '../hooks/useSideLayout';
 
 export function SetupScreen({
   onStart,
@@ -20,7 +22,7 @@ export function SetupScreen({
   openDrill?: DrillId;
 }) {
   const [entered, setEntered] = useState(!!openDrill);
-  const [mode, setMode] = useState<'quick' | 'scenario' | 'train'>(openDrill ? 'train' : 'quick');
+  const [mode, setMode] = useState<'quick' | 'scenario' | 'train' | 'stats'>(openDrill ? 'train' : 'quick');
   // Kept as strings so the fields can be cleared while typing (a numeric state
   // floored at the min would otherwise pin them at "0" and refuse to empty).
   const [numPlayers, setNumPlayers] = useState('6');
@@ -33,6 +35,8 @@ export function SetupScreen({
   const [autoAdvanceDefault, setAutoAdvanceDefault] = useState(true);
   // A picked scenario shows its strategy primer first; confirming starts the game.
   const [pendingScenario, setPendingScenario] = useState<Scenario | null>(null);
+  // Wide screens (laptops): tabs sit beside the logo and the menu fits the window.
+  const side = useSideLayout();
 
   // Landing splash: the full Poker IQ hero with a single Start button. Clicking
   // through reveals the game menu (quick game / scenario / training).
@@ -68,41 +72,53 @@ export function SetupScreen({
     );
   }
 
+  const tabs = (
+    <>
+      <ModeTab label="Quick game" active={mode === 'quick'} onClick={() => setMode('quick')} />
+      <ModeTab label="Scenario" active={mode === 'scenario'} onClick={() => setMode('scenario')} />
+      <ModeTab label="Training" active={mode === 'train'} onClick={() => setMode('train')} />
+      <ModeTab label="📊 Stats" active={mode === 'stats'} onClick={() => setMode('stats')} />
+    </>
+  );
+
+  // On laptops (and phones held sideways) the menu fits the window: the tabs
+  // move up beside the logo, content spreads across the width, and anything
+  // still too tall scrolls inside its own panel rather than the whole page.
   return (
-    <div className="relative min-h-[100dvh] overflow-hidden bg-slate-950">
+    <div className="relative min-h-[100dvh] overflow-hidden bg-slate-950 side:h-[100dvh]">
       {/* Layered casino backdrop: green felt glow up top, warm gold glow below. */}
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_50%_-10%,_rgba(16,120,72,0.5),_transparent_60%)]" />
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_50%_120%,_rgba(212,175,55,0.12),_transparent_55%)]" />
       <div className="pointer-events-none absolute -top-32 left-1/2 h-[520px] w-[520px] -translate-x-1/2 rounded-full bg-emerald-600/20 blur-3xl" />
       <div className="pointer-events-none absolute bottom-0 left-1/2 h-[300px] w-[760px] -translate-x-1/2 rounded-full bg-amber-500/[0.06] blur-3xl" />
 
-      <div className="relative mx-auto max-w-lg px-4 pt-10 pb-12">
-        <div className="mb-6 flex items-end justify-between">
+      <div className="relative mx-auto max-w-lg px-4 pt-10 pb-12 side:flex side:h-full side:max-w-6xl side:flex-col side:pt-3 side:pb-3">
+        <div className="mb-6 flex items-end justify-between gap-4 side:mb-3 side:items-center">
           <h1 className="text-3xl font-black tracking-tight drop-shadow-[0_2px_8px_rgba(0,0,0,0.5)]">
             <span className="bg-gradient-to-b from-amber-200 to-amber-500 bg-clip-text text-transparent">Poker</span>
             <span className="ml-1.5 bg-gradient-to-b from-emerald-300 to-emerald-500 bg-clip-text text-transparent">IQ</span>
           </h1>
+          {side && <div className="flex w-full max-w-xl gap-1 rounded-xl bg-slate-950/60 p-1 ring-1 ring-slate-700/50">{tabs}</div>}
           <button
             onClick={() => setEntered(false)}
-            className="rounded-full px-3 py-1 text-sm text-slate-400 ring-1 ring-slate-700/60 transition-colors hover:bg-slate-800/60 hover:text-slate-100"
+            className="shrink-0 rounded-full px-3 py-1 text-sm text-slate-400 ring-1 ring-slate-700/60 transition-colors hover:bg-slate-800/60 hover:text-slate-100"
           >
             ← Splash
           </button>
         </div>
 
         {/* Premium glass panel with a gold top edge. */}
-        <div className="relative overflow-hidden rounded-2xl border border-amber-500/20 bg-gradient-to-b from-slate-900/95 to-slate-950/95 p-6 text-slate-100 shadow-[0_24px_70px_-20px_rgba(0,0,0,0.85)] ring-1 ring-white/5">
+        <div className="relative overflow-hidden rounded-2xl border border-amber-500/20 bg-gradient-to-b from-slate-900/95 to-slate-950/95 p-6 text-slate-100 shadow-[0_24px_70px_-20px_rgba(0,0,0,0.85)] ring-1 ring-white/5 side:flex side:min-h-0 side:flex-1 side:flex-col side:p-5">
           <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-amber-400/70 to-transparent" />
-          <div className="mb-6 flex gap-1 rounded-xl bg-slate-950/60 p-1 ring-1 ring-slate-700/50">
-            <ModeTab label="Quick game" active={mode === 'quick'} onClick={() => setMode('quick')} />
-            <ModeTab label="Scenario" active={mode === 'scenario'} onClick={() => setMode('scenario')} />
-            <ModeTab label="Training" active={mode === 'train'} onClick={() => setMode('train')} />
-          </div>
+          {!side && <div className="mb-6 flex gap-1 rounded-xl bg-slate-950/60 p-1 ring-1 ring-slate-700/50">{tabs}</div>}
 
+          <div className={`side:min-h-0 side:flex-1 ${mode === 'train' ? '' : 'side:overflow-y-auto side:pr-1'}`}>
           {mode === 'train' ? (
             <TrainingHub initialDrill={openDrill} />
+          ) : mode === 'stats' ? (
+            <StatsView onTrain={() => setMode('train')} />
           ) : mode === 'scenario' ? (
-            <div className="space-y-2.5">
+            <div className="space-y-2.5 side:grid side:grid-cols-2 side:gap-3 side:space-y-0">
               {SCENARIOS.map((s) => (
                 <button
                   key={s.id}
@@ -137,6 +153,7 @@ export function SetupScreen({
               onStart={onStart}
             />
           )}
+          </div>
         </div>
       </div>
 
@@ -251,7 +268,9 @@ function QuickGameForm({
   // Remembered between games (also changeable mid-game from the ⋯ menu).
   const [botSpeed, setBotSpeed] = useState<BotSpeed>(loadBotSpeedPref);
   return (
-    <>
+    <div className="side:grid side:grid-cols-2 side:gap-6">
+      {/* Left: the game itself. */}
+      <div>
       <div className="mb-4 grid grid-cols-2 gap-3">
         <label className="block">
           <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-slate-400">Players (2-10)</span>
@@ -279,7 +298,7 @@ function QuickGameForm({
         </label>
       </div>
 
-      <div className="block mb-6">
+      <div className="block mb-6 side:mb-4">
         <span className="block text-sm text-slate-300 mb-2">Blind schedule</span>
         <div className="space-y-2">
           {Object.values(BLIND_SCHEDULES).map((s) => {
@@ -306,7 +325,7 @@ function QuickGameForm({
         </div>
       </div>
 
-      <label className="mb-6 flex items-center justify-between gap-3 rounded-lg border border-slate-700 bg-slate-800 px-3 py-2">
+      <label className="mb-6 flex items-center justify-between gap-3 rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 side:mb-0">
         <span>
           <span className="block text-sm text-slate-200">Action timer</span>
           <span className="block text-xs text-slate-400">Auto-fold (or check) if you run out of time to act.</span>
@@ -337,7 +356,11 @@ function QuickGameForm({
         </span>
       </label>
 
-      <div className="mb-6 space-y-2">
+      </div>
+
+      {/* Right: table options and start. */}
+      <div className="side:flex side:flex-col">
+      <div className="mb-6 space-y-2 side:mb-4">
         <span className="block text-xs font-medium uppercase tracking-wide text-slate-400">Table options</span>
         <OptionToggle
           label="Coaching"
@@ -371,7 +394,7 @@ function QuickGameForm({
       </div>
 
       <button
-        className="w-full rounded-xl bg-gradient-to-b from-emerald-500 to-emerald-700 py-3 text-base font-bold text-white shadow-lg shadow-emerald-900/40 ring-1 ring-emerald-400/40 transition-all hover:from-emerald-400 hover:to-emerald-600 active:scale-[0.99]"
+        className="w-full rounded-xl bg-gradient-to-b from-emerald-500 to-emerald-700 py-3 text-base font-bold side:mt-auto text-white shadow-lg shadow-emerald-900/40 ring-1 ring-emerald-400/40 transition-all hover:from-emerald-400 hover:to-emerald-600 active:scale-[0.99]"
         onClick={() =>
           onStart({
             seats: buildDefaultSeats(clampInt(numPlayers, 2, 10, 6)),
@@ -387,6 +410,7 @@ function QuickGameForm({
       >
         ♠ Start playing
       </button>
-    </>
+      </div>
+    </div>
   );
 }

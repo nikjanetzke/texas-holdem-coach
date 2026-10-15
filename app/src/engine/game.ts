@@ -233,9 +233,14 @@ export class HandEngine {
       // so putting more in is a raise. Offering "bet" there made the Bet and
       // All-in buttons silently do nothing (the engine rejects the bet).
       if (player.stack > 0) types.push(this.currentBet > 0 ? 'raise' : 'bet');
-    } else {
-      if (player.stack > owed) types.push('call');
-      if (player.stack > 0) types.push('raise');
+    } else if (player.stack > owed) {
+      types.push('call', 'raise');
+    } else if (player.stack > 0) {
+      // Facing a bet as big as (or bigger than) your whole stack: you can only
+      // call with everything you have (an all-in for less). This used to offer
+      // "raise" and no "call", so there was no Call button, the C shortcut did
+      // nothing, and bots — whose "call" was then rejected — folded instead.
+      types.push('call');
     }
     return {
       types,

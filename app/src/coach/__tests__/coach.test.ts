@@ -155,5 +155,21 @@ describe('LeakTracker', () => {
       expect(r.score).toBe(9);
     });
   });
+
+  it("facing a bet that covers you, a strong hand is told to call (there's no raise)", () => {
+    const a = generateAdvice({
+      holeCards: cards('Ah Ad'),
+      communityCards: cards('Ks 7h 2c'),
+      numOpponents: 1,
+      potBeforeAction: 2000,
+      amountToCall: 5000,
+      position: 'Late',
+      bigBlind: 50,
+      effectiveStack: 3000,
+      stackBehind: 2400,
+    });
+    expect(a.suggestedAction).toBe('call');
+    expect(a.why).toMatch(/call, all in/);
+  });
 });
 
