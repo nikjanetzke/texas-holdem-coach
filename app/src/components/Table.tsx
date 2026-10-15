@@ -6,6 +6,7 @@ import { HandHistoryPanel, HandReplay } from './HandHistoryPanel';
 import { OpponentNotes, type OpponentEntry } from './OpponentNotes';
 import { readOpponent } from '../training/opponentNotes';
 import { StatsPanel } from './StatsPanel';
+import { ProgressPanel } from './ProgressPanel';
 import { ExportControls } from './ExportControls';
 import { HAND_RANK_NAMES } from '../engine/evaluator';
 import type { ActionType } from '../engine/betting';
@@ -13,7 +14,7 @@ import { PokerCanvas } from '../pixi/PokerCanvas';
 import { soundManager, type SfxName } from '../sound/SoundManager';
 import { setSpeechEnabled, speak, speechSupported } from '../sound/speech';
 import { chenScore } from '../engine/preflop';
-import { suggestionLabel, type CoachMath } from '../coach/coach';
+import { LEAK_TEXT, suggestionLabel, type CoachMath } from '../coach/coach';
 import type { Card } from '../engine/deck';
 import { SCENARIO_STRATEGIES } from '../scenarios/strategy';
 import { StrategyGuide } from './StrategyGuide';
@@ -60,6 +61,7 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: (practiseDr
     nextLevel,
     msLeftInLevel,
     getSessionReport,
+    sessionId,
     botSpeed,
     setBotSpeed,
   } = useGame(setup);
@@ -77,7 +79,7 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: (practiseDr
   const [heldAdvice, setHeldAdvice] = useState<{ advice: NonNullable<typeof advice>; street: string } | null>(null);
   const [showCardRating, setShowCardRating] = useState(false);
   const [showMath, setShowMath] = useState(false);
-  const [openPanel, setOpenPanel] = useState<'stats' | 'history' | 'export' | null>('stats');
+  const [openPanel, setOpenPanel] = useState<'stats' | 'progress' | 'history' | 'export' | null>('stats');
   const [showMenu, setShowMenu] = useState(false);
   // Auto-advance defaults on (paused = false); the setup screen can flip these.
   const [paused, setPaused] = useState(!(setup.autoAdvanceDefault ?? true));
@@ -440,6 +442,7 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: (practiseDr
               onPractise={(d) => onExit(d)}
               onLeave={() => onExit()}
               leaveLabel="♠ Play again"
+              sessionId={sessionId}
             />
           </div>
         </div>
@@ -1048,9 +1051,10 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: (practiseDr
         <div className="mt-4 rounded-xl border border-slate-800 bg-slate-900/50 p-3 text-xs text-slate-400">
           <div className="mb-1 font-semibold text-slate-300">Leaks to watch</div>
           {leaks.map((l) => (
-            <div key={l.leak}>
-              <span className="capitalize text-rose-300">{l.leak.replace(/([A-Z])/g, ' $1')}</span>: {l.count} time
+            <div key={l.leak} className="mt-0.5">
+              <span className="text-rose-300">{LEAK_TEXT[l.leak].title}</span>: {l.count} time
               {l.count === 1 ? '' : 's'} ({l.percentOfHands.toFixed(0)}% of decisions)
+              <div className="text-slate-500">{LEAK_TEXT[l.leak].detail}</div>
             </div>
           ))}
         </div>
@@ -1070,6 +1074,7 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: (practiseDr
               onPractise={(d) => onExit(d)}
               onLeave={() => onExit()}
               onStay={() => setShowReport(false)}
+              sessionId={sessionId}
             />
           </div>
         </div>
@@ -1150,6 +1155,13 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: (practiseDr
                 onToggle={() => setOpenPanel((p) => (p === 'stats' ? null : 'stats'))}
               >
                 <StatsPanel history={handHistory} leaks={leaks} />
+              </Collapsible>
+              <Collapsible
+                label="Your progress"
+                open={openPanel === 'progress'}
+                onToggle={() => setOpenPanel((p) => (p === 'progress' ? null : 'progress'))}
+              >
+                <ProgressPanel currentId={sessionId} />
               </Collapsible>
               <Collapsible
                 label={`Hand history${handHistory.length ? ` (${handHistory.length})` : ''}`}
@@ -1265,9 +1277,11 @@ function MathBreakdown({ math, suggested }: { math: CoachMath; suggested: string
           :
         </p>
         <p className="mt-0.5 text-slate-400">
-          We deal out the rest of the board {math.iterations.toLocaleString()} times at random against{' '}
+          {math.boardCards.length >= 5 ? 'All five cards are out, so we try' : 'We deal out the rest of the board'}{' '}
+          {math.iterations.toLocaleString()} {math.boardCards.length >= 5 ? 'possible hands' : 'times'} at random against{' '}
           {math.numOpponents} opponent{math.numOpponents === 1 ? '' : 's'} and count how often you'd win:
         </p>
+        {math.rangeNote && <p className="mt-0.5 text-slate-400">{math.rangeNote}</p>}
         <p className="mt-0.5 font-mono">
           win {math.winPercent.toFixed(1)}% + (tie {math.tiePercent.toFixed(1)}% ÷ 2) ={' '}
           <span className="text-emerald-300">{equity.toFixed(1)}% equity</span>

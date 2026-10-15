@@ -1,6 +1,7 @@
 import type { Card } from './deck';
 import { makeDeck } from './deck';
 import { compareHandValues, evaluateBestHand } from './evaluator';
+import { fitsRange, type OpponentRanges } from './ranges';
 
 export interface EquityResult {
   winProbability: number;
@@ -15,8 +16,10 @@ function remainingDeck(used: Card[]): Card[] {
 }
 
 /**
- * Monte Carlo equity estimate for the hero's hole cards against N random opponents,
- * given the known community cards so far (0, 3, 4, or 5 cards).
+ * Monte Carlo equity estimate for the hero's hole cards against N opponents,
+ * given the known community cards so far (0, 3, 4, or 5 cards). Opponents hold
+ * random hands, or — with `ranges` — hands that fit what their betting suggests
+ * (the first opponent is the bettor; see ranges.ts).
  */
 export function estimateEquity(
   heroHoleCards: Card[],
@@ -24,6 +27,7 @@ export function estimateEquity(
   numOpponents: number,
   iterations = 1000,
   rng: () => number = Math.random,
+  ranges?: OpponentRanges,
 ): EquityResult {
   if (numOpponents < 1) {
     return { winProbability: 1, tieProbability: 0, lossProbability: 0, iterations: 0 };
@@ -52,6 +56,8 @@ export function estimateEquity(
   const heroSeven: Card[] = new Array(5 + heroHoleCards.length);
   const oppSeven: Card[] = new Array(5 + 2);
 
+  const oppHole: Card[] = new Array(2);
+
   for (let i = 0; i < iterations; i++) {
     // Partial shuffle: pull `cardsNeeded` uniformly-random distinct cards to
     // the front of the deck. Only these positions get touched per iteration.
@@ -62,7 +68,29 @@ export function estimateEquity(
       deck[j] = tmp;
     }
 
-    let drawIndex = 0;
+    // Layout of the front of the deck: opponents' hole cards, then the rest of the board.
+    // With ranges, any opponent hand that doesn't fit theirs is swapped for another
+    // random pair from the undealt cards (after a few dozen misses, take what
+    // comes, so a very narrow range can't stall the simulation).
+    if (ranges) {
+      for (let o = 0; o < numOpponents; o++) {
+        const range = o === 0 ? ranges.bettor : ranges.others;
+        if (!range) continue;
+        const at = o * 2;
+        for (let tries = 0; tries < 40; tries++) {
+          oppHole[0] = deck[at];
+          oppHole[1] = deck[at + 1];
+          if (fitsRange(oppHole, communityCards, range, rng())) break;
+          for (let k = at; k < at + 2; k++) {
+            const j = k + Math.floor(rng() * (deckLen - k));
+            const tmp = deck[k];
+            deck[k] = deck[j];
+            deck[j] = tmp;
+          }
+        }
+      }
+    }
+    let drawIndex = numOpponents * 2;
     for (let b = communityCards.length; b < 5; b++) board[b] = deck[drawIndex++];
 
     for (let c = 0; c < heroHoleCards.length; c++) heroSeven[c] = heroHoleCards[c];
@@ -73,14 +101,12 @@ export function estimateEquity(
     let tiesWithBest = false;
 
     for (let o = 0; o < numOpponents; o++) {
-      oppSeven[0] = deck[drawIndex++];
-      oppSeven[1] = deck[drawIndex++];
+      oppSeven[0] = deck[o * 2];
+      oppSeven[1] = deck[o * 2 + 1];
       for (let c = 0; c < 5; c++) oppSeven[2 + c] = board[c];
       const cmp = compareHandValues(heroValue, evaluateBestHand(oppSeven));
       if (cmp < 0) {
         heroBeatsAll = false;
-        // NOTE: must keep consuming this opponent's cards is unnecessary here
-        // because drawIndex already advanced; breaking early is safe.
         break;
       }
       if (cmp === 0) tiesWithBest = true;

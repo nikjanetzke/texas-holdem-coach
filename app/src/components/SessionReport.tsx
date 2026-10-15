@@ -1,5 +1,6 @@
 import type { DrillId } from '../persistence/drillStats';
 import type { SessionReport as Report } from '../training/sessionReport';
+import { compareToRecent, loadProgress } from '../persistence/progress';
 
 // Shown when you leave the table (and under the game-over / champion screen):
 // what happened this sitting, your two biggest leaks, and a button straight to
@@ -10,6 +11,7 @@ export function SessionReport({
   onLeave,
   onStay,
   leaveLabel = 'Leave table',
+  sessionId,
 }: {
   report: Report;
   onPractise: (drill: DrillId) => void;
@@ -17,8 +19,11 @@ export function SessionReport({
   /** Omitted when there's no table to go back to (game over). */
   onStay?: () => void;
   leaveLabel?: string;
+  /** This sitting's id in your progress history, to compare with earlier sessions. */
+  sessionId?: number;
 }) {
   const net = report.netChips;
+  const vsRecent = sessionId != null ? compareToRecent(loadProgress(), { id: sessionId, avgScore: report.avgScore }) : null;
   const mistakesLinked = report.leaks.some((l) => l.drill === 'mistakes');
   return (
     <div className="space-y-3 text-left text-sm text-slate-300">
@@ -38,6 +43,16 @@ export function SessionReport({
           tone={report.avgScore == null ? 'text-slate-400' : report.avgScore >= 7 ? 'text-emerald-300' : report.avgScore >= 5 ? 'text-amber-300' : 'text-rose-300'}
         />
       </div>
+
+      {vsRecent && (
+        <p className="rounded-lg bg-slate-800/60 px-3 py-2 text-xs text-slate-300">
+          {vsRecent.delta > 0 ? '📈' : vsRecent.delta < 0 ? '📉' : '➡️'} Decision score {report.avgScore}/10 —{' '}
+          {vsRecent.delta === 0
+            ? 'the same as'
+            : `${vsRecent.delta > 0 ? 'up' : 'down'} ${Math.abs(vsRecent.delta)} on`}{' '}
+          your last {vsRecent.sessions === 1 ? 'session' : `${vsRecent.sessions} sessions`} ({vsRecent.previousAvg}/10).
+        </p>
+      )}
 
       {report.leaks.length > 0 ? (
         <div>

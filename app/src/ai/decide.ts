@@ -1,6 +1,7 @@
 import type { Card } from '../engine/deck';
 import { rankValue } from '../engine/deck';
 import { computePotOdds, estimateEquity } from '../engine/equity';
+import { likelyRange } from '../engine/ranges';
 import type { ActionType } from '../engine/betting';
 import type { AIProfile } from './profiles';
 
@@ -60,7 +61,15 @@ function boardTexture(board: Card[]): { danger: number; flushy: boolean; straigh
 export function decideAIAction(input: AIDecisionInput): AIDecision {
   const rng = input.rng ?? Math.random;
   const { profile } = input;
-  const equityResult = estimateEquity(input.holeCards, input.communityCards, input.numOpponents, 250, rng);
+  // Judge the hand against what opponents' betting says they hold, not random
+  // cards — otherwise bots call far too much and bluffs never work.
+  const ranges = likelyRange({
+    communityCards: input.communityCards,
+    amountToCall: input.amountToCall,
+    potBeforeAction: input.potBeforeAction,
+    bigBlind: input.bigBlind,
+  });
+  const equityResult = estimateEquity(input.holeCards, input.communityCards, input.numOpponents, 250, rng, ranges);
   const equity = equityResult.winProbability + equityResult.tieProbability / 2;
 
   const pos = input.positionFraction ?? 0.5; // 0 early … 1 late
@@ -109,7 +118,7 @@ export function decideAIAction(input: AIDecisionInput): AIDecision {
   // Equity needed to continue: rises with a bigger bet and a scarier board;
   // looser (calling-station) profiles need less. Drawy boards get a small
   // implied-odds discount so bots peel with reasonable draws.
-  let needed = potOdds + betRatio * 0.14 + tex.danger * 0.05 - (profile.callingFrequency - 0.5) * 0.22;
+  let needed = potOdds + betRatio * 0.05 + tex.danger * 0.05 - (profile.callingFrequency - 0.5) * 0.22;
   if (tex.flushy || tex.straighty) needed -= 0.03;
   needed = clamp(needed, 0.05, 0.95);
 

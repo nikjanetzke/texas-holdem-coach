@@ -1,6 +1,8 @@
-import { useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import { SetupScreen } from './components/SetupScreen';
-import { Table } from './components/Table';
+// The table (with the Pixi.js graphics engine, most of the app's size) loads
+// only when a game starts, so the menu and training open quickly on phones.
+const Table = lazy(() => import('./components/Table').then((m) => ({ default: m.Table })));
 import { ErrorBoundary } from './components/ErrorBoundary';
 import type { GameSetup } from './hooks/useGame';
 import type { DrillId } from './persistence/drillStats';
@@ -36,7 +38,9 @@ function App() {
     <div className="min-h-screen bg-slate-950 text-slate-100">
       <ErrorBoundary onReset={() => exitToSetup()}>
         {setup ? (
-          <Table setup={setup} onExit={exitToSetup} />
+          <Suspense fallback={<div className="flex min-h-screen items-center justify-center text-slate-400">Shuffling up…</div>}>
+            <Table setup={setup} onExit={exitToSetup} />
+          </Suspense>
         ) : (
           <SetupScreen key={openDrill ?? 'menu'} onStart={startGame} openDrill={openDrill} />
         )}

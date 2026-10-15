@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:e2e": "node e2e/run.mjs"
   },
   "dependencies": {
     "howler": "^2.2.4",
@@ -27,6 +29,7 @@
     "tailwindcss": "^4.3.1",
     "typescript": "~6.0.2",
     "vite": "^8.1.0",
+    "vite-node": "^6.0.0",
     "vitest": "^4.1.9"
   }
 }

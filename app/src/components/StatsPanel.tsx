@@ -1,3 +1,4 @@
+import { LEAK_TEXT, type Leak } from '../coach/coach';
 import { useMemo } from 'react';
 import type { HandRecord } from '../hooks/useGame';
 import { getDrillStats } from '../persistence/drillStats';
@@ -113,7 +114,7 @@ export function StatsPanel({ history, leaks }: { history: HandRecord[]; leaks: L
           <div className="space-y-1">
             {leaks.map((l) => (
               <div key={l.leak} className="flex items-center justify-between text-xs">
-                <span className="capitalize text-rose-300">{l.leak.replace(/([A-Z])/g, ' $1')}</span>
+                <span className="text-rose-300" title={LEAK_TEXT[l.leak as Leak]?.detail}>{LEAK_TEXT[l.leak as Leak]?.title ?? l.leak}</span>
                 <span className="text-slate-400">
                   {l.count}× ({l.percentOfHands.toFixed(0)}% of decisions)
                 </span>

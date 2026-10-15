@@ -18,6 +18,7 @@ import type { MistakeKind } from '../training/mistakes';
 import { sizingNote } from '../training/sizingDrill';
 import { buildSessionReport, type SessionHand } from '../training/sessionReport';
 import type { DecisionCoachNote } from '../training/replay';
+import { recordSession } from '../persistence/progress';
 
 export interface SeatConfig {
   id: string;
@@ -80,7 +81,9 @@ export interface HandRecord {
   startStacks?: Record<string, number>;
 }
 
-const MAX_HAND_HISTORY = 20;
+// Long enough for the replayer, stats and opponent notes to have real
+// material (~3-5 KB a hand in local storage).
+const MAX_HAND_HISTORY = 100;
 
 // Pick a fresh, shuffled subset of the character roster each game so the table
 // feels different but every opponent is one of the recurring named personalities.
@@ -261,6 +264,11 @@ export function useGame(setup: GameSetup) {
     scores: [] as number[],
     mistakes: { freefold: 0, overfold: 0, overcall: 0 } as Record<MistakeKind, number>,
     smallValueBets: 0,
+    // Every hand finished this sitting. Kept here rather than read back from the
+    // hand history, which only holds the most recent MAX_HAND_HISTORY hands.
+    hands: [] as SessionHand[],
+    // Identifies this sitting in your progress history.
+    id: Date.now(),
   });
   const [, forceRender] = useState(0);
 
@@ -432,6 +440,37 @@ export function useGame(setup: GameSetup) {
       startStacks: Object.fromEntries(eng.players.map((p) => [p.id, handStartStacksRef.current[p.id] ?? p.stack])),
     };
     setHandHistory((prev) => [record, ...prev].slice(0, MAX_HAND_HISTORY));
+
+    // This sitting's tally, and your progress history (updated every hand).
+    const sess = sessionRef.current;
+    sess.hands.push({
+      vpip: eng.actionLog.some(
+        (a) =>
+          a.playerId === 'human' &&
+          a.street === 'preflop' &&
+          !a.forced &&
+          (a.type === 'call' || a.type === 'raise' || a.type === 'bet' || a.type === 'all-in'),
+      ),
+      won: (eng.showdownResult?.payouts['human'] ?? 0) > 0,
+    });
+    const report = buildSessionReport({
+      hands: sess.hands,
+      decisionScores: sess.scores,
+      netChips: (newStacks['human'] ?? sess.startStack) - sess.startStack,
+      mistakes: sess.mistakes,
+      smallValueBets: sess.smallValueBets,
+    });
+    recordSession({
+      id: sess.id,
+      updatedAt: Date.now(),
+      hands: report.handsPlayed,
+      decisions: sess.scores.length,
+      avgScore: report.avgScore,
+      netChips: report.netChips,
+      vpipPercent: report.vpipPercent,
+      mistakes: { ...sess.mistakes },
+      smallValueBets: sess.smallValueBets,
+    });
   };
   useEffect(() => {
     if (engine) settleHand(engine);
@@ -629,36 +668,25 @@ export function useGame(setup: GameSetup) {
   }, [dealerSeat, setup.seats.length, startHand, isLastLevel, levelMs, engine, seatConfigById, currentLevel.bigBlind, handNumber]);
 
   // End-of-session summary, built from this sitting's hands and decisions.
-  const getSessionReport = useCallback(
-    (currentHumanStack: number) => {
-      const sess = sessionRef.current;
-      const hands: SessionHand[] = handHistory
-        .filter((h) => h.handNumber >= sess.startHandNumber)
-        .map((h) => ({
-          vpip: h.actionLog.some(
-            (a) =>
-              a.playerId === 'human' &&
-              a.street === 'preflop' &&
-              !a.forced &&
-              (a.type === 'call' || a.type === 'raise' || a.type === 'bet' || a.type === 'all-in'),
-          ),
-          won: (h.showdownResult?.payouts['human'] ?? 0) > 0,
-        }));
-      return buildSessionReport({
-        hands,
-        decisionScores: sess.scores,
-        netChips: currentHumanStack - sess.startStack,
-        mistakes: sess.mistakes,
-        smallValueBets: sess.smallValueBets,
-      });
-    },
-    [handHistory],
-  );
+  const getSessionReport = useCallback((currentHumanStack: number) => {
+    const sess = sessionRef.current;
+    return buildSessionReport({
+      hands: sess.hands,
+      decisionScores: sess.scores,
+      netChips: currentHumanStack - sess.startStack,
+      mistakes: sess.mistakes,
+      smallValueBets: sess.smallValueBets,
+    });
+  }, []);
+
+  /** This sitting's id in your progress history. */
+  const sessionId = sessionRef.current.id;
 
   return {
     botSpeed,
     setBotSpeed,
     getSessionReport,
+    sessionId,
     engine,
     potTotal,
     currentActorId,

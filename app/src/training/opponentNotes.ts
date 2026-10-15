@@ -9,8 +9,9 @@ import type { AIProfile } from '../ai/profiles';
 // simulated games showed that over the ~20 hands a session keeps, observed
 // stats are mostly noise (the same opponent read as "calls a lot" in one
 // stretch and "tight" in the next), which would teach wrong conclusions. Over
-// hundreds of hands the styles do show (e.g. Leo folded to 16% of bets vs The
-// Professor's 34%; Spike made ~2 bets/raises per call vs Leo's 0.6). So the
+// hundreds of hands the styles do show (e.g. Leo folded to ~30% of bets after
+// the flop vs The Professor's ~60%; Spike made ~1.4 bets/raises per call vs
+// Leo's ~0.5). So the
 // note unlocks once you've watched someone for a few hands, and shows what
 // you've actually seen as supporting evidence. Pure, so it can be unit tested.
 

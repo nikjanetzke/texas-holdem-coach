@@ -1,5 +1,6 @@
 import type { Card } from '../engine/deck';
 import { computePotOdds, estimateEquity } from '../engine/equity';
+import { describeRange, likelyRange } from '../engine/ranges';
 import { chenScore } from '../engine/preflop';
 import type { ActionType } from '../engine/betting';
 
@@ -71,6 +72,8 @@ export interface CoachMath {
   amountToCall: number;
   potOddsPercent: number;
   facingBet: boolean;
+  /** What the coach assumed opponents hold, in plain English (absent = random hands). */
+  rangeNote?: string;
 }
 
 export interface CoachAdvice {
@@ -131,12 +134,16 @@ function seedForSpot(input: CoachAdviceInput): number {
 }
 
 export function generateAdvice(input: CoachAdviceInput): CoachAdvice {
+  // Against the hands opponents' betting suggests, not random cards: a player
+  // who bets the pot rarely holds a random hand (see ranges.ts).
+  const ranges = likelyRange(input);
   const equityResult = estimateEquity(
     input.holeCards,
     input.communityCards,
     input.numOpponents,
     iterationsFor(input.numOpponents),
     input.rng ?? mulberry32(seedForSpot(input)),
+    ranges,
   );
   const equity = equityResult.winProbability + equityResult.tieProbability / 2;
   const handStrengthLabel = classifyHandStrength(equity);
@@ -147,7 +154,10 @@ export function generateAdvice(input: CoachAdviceInput): CoachAdvice {
   const warnings: string[] = [];
   let suggestedAction: ActionType;
 
-  reasoning.push(`Your hand is roughly ${handStrengthLabel.toLowerCase()} here, with an estimated ${(equity * 100).toFixed(0)}% chance to win against ${input.numOpponents} opponent${input.numOpponents === 1 ? '' : 's'}.`);
+  const against = ranges
+    ? `against the hands ${input.numOpponents === 1 ? 'your opponent is' : `your ${input.numOpponents} opponents are`} likely to have`
+    : `against ${input.numOpponents} opponent${input.numOpponents === 1 ? '' : 's'}`;
+  reasoning.push(`Your hand is roughly ${handStrengthLabel.toLowerCase()} here, with an estimated ${(equity * 100).toFixed(0)}% chance to win ${against}.`);
 
   // Position teaching, in the same green/amber vocabulary as the scenario
   // range charts. Only added preflop and only when the seat actually changes
@@ -194,7 +204,7 @@ export function generateAdvice(input: CoachAdviceInput): CoachAdvice {
       suggestedAction = 'call';
       reasoning.push(`Your equity (${(equity * 100).toFixed(0)}%) meets the pot odds (${potOdds.potOddsPercent.toFixed(0)}%), so calling is reasonable.`);
     }
-    if (equity < 0.3 && input.amountToCall > input.potBeforeAction * 0.5) {
+    if (equity < 0.3 && input.amountToCall > input.potBeforeAction * 0.5 && input.communityCards.length > 0) {
       warnings.push('Be careful chasing a weak draw against a large bet — the cost to continue is high relative to your actual winning chances.');
     }
   } else {
@@ -302,6 +312,7 @@ export function generateAdvice(input: CoachAdviceInput): CoachAdvice {
       amountToCall: potOdds.amountToCall,
       potOddsPercent: potOdds.potOddsPercent,
       facingBet,
+      rangeNote: describeRange(ranges, input.communityCards.length > 0, input.communityCards.length >= 5),
     },
   };
 }
@@ -312,6 +323,21 @@ export function suggestionLabel(advice: Pick<CoachAdvice, 'suggestedAction' | 'a
 }
 
 export type Leak = 'overcalling' | 'overfolding' | 'overbluffing' | 'ignoringPotOdds' | 'outOfPositionPlay';
+
+/** Each leak in plain English: a short title and what it means. */
+export const LEAK_TEXT: Record<Leak, { title: string; detail: string }> = {
+  overcalling: { title: 'Calling too often', detail: 'Calling when your chance of winning was well below what the call cost.' },
+  overfolding: { title: 'Folding too often', detail: 'Folding hands that won often enough to be worth a call.' },
+  overbluffing: { title: 'Raising with weak hands', detail: 'Raising with under a 30% chance to win. Bluffs need the right spot.' },
+  ignoringPotOdds: {
+    title: 'Not using pot odds',
+    detail: 'Calls and folds that ignored the price: compare what a call costs with what you can win.',
+  },
+  outOfPositionPlay: {
+    title: 'Calling weak hands from the blinds',
+    detail: 'From the blinds you act first after the flop, a tough spot — so calling with a weak hand there costs chips. Play fewer, stronger hands.',
+  },
+};
 
 export interface DecisionRecord {
   actualAction: ActionType;
@@ -356,7 +382,11 @@ export class LeakTracker {
     const calledTooLoose = (record.actualAction === 'call' || record.actualAction === 'raise') && record.equityPercent < record.potOddsPercent - 10;
     const foldedTooTight = record.actualAction === 'fold' && record.equityPercent > record.potOddsPercent + 15;
     const bluffedWeak = record.actualAction === 'raise' && record.equityPercent < 30;
-    const outOfPosition = (record.position === 'Small Blind' || record.position === 'Big Blind') && record.actualAction !== 'fold';
+    // Only paying to carry on with a weak hand counts — checking for free, or
+    // playing a strong hand from the blinds, is fine (it used to count every
+    // non-fold, so the leak fired on most decisions at small tables).
+    const outOfPosition =
+      (record.position === 'Small Blind' || record.position === 'Big Blind') && record.actualAction === 'call' && record.equityPercent < 40;
 
     if (calledTooLoose) this.counts.overcalling++;
     if (foldedTooTight) this.counts.overfolding++;
