@@ -35,6 +35,8 @@ for (let i = 0; i < 600 && hands < 6; i++) {
       hands++;
       scoreLines += await page.locator('text=/Decision score \\d+\\/10/').count();
     }
+    // With the coach on the next hand waits for you.
+    await page.getByRole('button', { name: 'Next hand →' }).click().catch(() => {});
   }
   await page.waitForTimeout(250);
 }

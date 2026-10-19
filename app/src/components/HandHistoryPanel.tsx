@@ -272,3 +272,99 @@ export function HandHistoryPanel({ history, onReplay }: { history: HandRecord[];
     </div>
   );
 }
+
+const STREET_LABEL: Record<string, string> = { preflop: 'Before the flop', flop: 'Flop', turn: 'Turn', river: 'River' };
+
+// "◀ Last hand": the previous hand on one screen — how it ended, and each of
+// your decisions with the coach's verdict — without stepping through a replay.
+// Coaching UI: only offered while the coach is on.
+export function LastHandReview({ record, onReplay, onClose }: { record: HandRecord; onReplay: () => void; onClose: () => void }) {
+  const steps = useMemo(() => buildReplay(record), [record]);
+  const result = steps[steps.length - 1];
+  const mine = steps.filter((s) => s.decision);
+  const you = record.players.find((p) => p.id === 'human');
+  const net = yourResult(steps, record);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-3" onClick={onClose}>
+      <div
+        role="dialog"
+        aria-label={`Last hand, number ${record.handNumber}`}
+        className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-slate-700 bg-gradient-to-b from-slate-900 to-slate-950 p-4 text-sm text-slate-200 shadow-2xl ring-1 ring-white/5"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-2 flex items-center justify-between">
+          <h2 className="font-bold text-slate-100">◀ Last hand — #{record.handNumber}</h2>
+          <button onClick={onClose} aria-label="Close" className="rounded px-2 py-1 text-slate-400 hover:bg-slate-800 hover:text-slate-100">
+            ✕
+          </button>
+        </div>
+
+        <div className="mb-3 flex flex-wrap items-center gap-3">
+          <div>
+            <div className="mb-0.5 text-[10px] uppercase tracking-wide text-emerald-300">Your cards</div>
+            <div className="flex gap-1">{you?.holeCards.map((c, i) => <CardView key={i} card={c} size="sm" />)}</div>
+          </div>
+          {record.communityCards.length > 0 && (
+            <div>
+              <div className="mb-0.5 text-[10px] uppercase tracking-wide text-slate-400">Board</div>
+              <div className="flex gap-1">{record.communityCards.map((c) => <CardView key={cardText(c)} card={c} size="sm" />)}</div>
+            </div>
+          )}
+          {net != null && (
+            <div className={`ml-auto font-mono text-base font-bold ${net > 0 ? 'text-emerald-300' : net < 0 ? 'text-rose-300' : 'text-slate-400'}`}>
+              {net > 0 ? '+' : ''}
+              {money(net)}
+            </div>
+          )}
+        </div>
+        <div className="mb-3 rounded-lg bg-slate-800/80 px-3 py-2 text-amber-100">{result?.text}</div>
+
+        <div className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400">Your decisions</div>
+        {mine.length === 0 ? (
+          <p className="text-xs text-slate-400">You didn't have a decision to make this hand.</p>
+        ) : (
+          <div className="space-y-2">
+            {mine.map((s, k) => {
+              const c = s.decision?.coach;
+              return (
+                <div key={k} className="rounded-lg border border-slate-700/70 bg-slate-900/60 px-3 py-2">
+                  <div className="flex flex-wrap items-baseline justify-between gap-x-2">
+                    <span className="text-xs text-slate-400">{STREET_LABEL[s.street] ?? s.street}</span>
+                    {c && <span className={`text-xs font-semibold ${scoreTone(c.score)}`}>{c.score}/10</span>}
+                  </div>
+                  <div className="font-semibold text-slate-100">{s.text}</div>
+                  {c ? (
+                    <div className="mt-1 text-[13px] leading-snug">
+                      <span className="text-indigo-200">Coach suggested </span>
+                      <span className="font-semibold capitalize text-amber-300">{c.suggested}</span>
+                      <span className="text-slate-400"> — {c.explanation}</span>
+                      {c.reason && <div className="mt-0.5 text-slate-400">{c.reason}</div>}
+                    </div>
+                  ) : (
+                    <div className="mt-1 text-xs text-slate-500">No coach notes saved for this decision.</div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        <div className="mt-4 flex gap-2">
+          <button onClick={onReplay} className="flex-1 rounded-lg bg-slate-700 px-3 py-2 font-semibold text-white hover:bg-slate-600">
+            ↺ Step-by-step replay
+          </button>
+          <button onClick={onClose} className="flex-1 rounded-lg bg-emerald-600 px-3 py-2 font-semibold text-white hover:bg-emerald-500">
+            Back to the table
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}

@@ -182,7 +182,7 @@ export function SizingTrainer() {
             )}
           </div>
 
-          <button data-next onClick={next} className="w-full rounded-lg bg-emerald-600 py-2 font-semibold text-white transition-colors hover:bg-emerald-500 side:sticky side:bottom-0 side:z-10 side:shadow-[0_-10px_18px_rgba(2,6,23,0.95)]">
+          <button data-next onClick={next} className="w-full rounded-lg bg-emerald-600 py-2 font-semibold text-white transition-colors hover:bg-emerald-500 sticky bottom-0 z-10 shadow-[0_-10px_18px_rgba(2,6,23,0.95)]">
             Next hand →
           </button>
         </div>

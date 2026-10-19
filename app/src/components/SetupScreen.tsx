@@ -85,15 +85,15 @@ export function SetupScreen({
   // move up beside the logo, content spreads across the width, and anything
   // still too tall scrolls inside its own panel rather than the whole page.
   return (
-    <div className="relative min-h-[100dvh] overflow-hidden bg-slate-950 side:h-[100dvh]">
+    <div className="relative h-[100dvh] overflow-hidden bg-slate-950">
       {/* Layered casino backdrop: green felt glow up top, warm gold glow below. */}
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_50%_-10%,_rgba(16,120,72,0.5),_transparent_60%)]" />
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_50%_120%,_rgba(212,175,55,0.12),_transparent_55%)]" />
       <div className="pointer-events-none absolute -top-32 left-1/2 h-[520px] w-[520px] -translate-x-1/2 rounded-full bg-emerald-600/20 blur-3xl" />
       <div className="pointer-events-none absolute bottom-0 left-1/2 h-[300px] w-[760px] -translate-x-1/2 rounded-full bg-amber-500/[0.06] blur-3xl" />
 
-      <div className="relative mx-auto max-w-lg px-4 pt-10 pb-12 side:flex side:h-full side:max-w-6xl side:flex-col side:pt-3 side:pb-3">
-        <div className="mb-6 flex items-end justify-between gap-4 side:mb-3 side:items-center">
+      <div className="relative mx-auto flex h-full max-w-lg flex-col px-4 pt-4 pb-3 side:max-w-6xl side:pt-3">
+        <div className="mb-3 flex items-end justify-between gap-4 side:items-center">
           <h1 className="text-3xl font-black tracking-tight drop-shadow-[0_2px_8px_rgba(0,0,0,0.5)]">
             <span className="bg-gradient-to-b from-amber-200 to-amber-500 bg-clip-text text-transparent">Poker</span>
             <span className="ml-1.5 bg-gradient-to-b from-emerald-300 to-emerald-500 bg-clip-text text-transparent">IQ</span>
@@ -108,11 +108,13 @@ export function SetupScreen({
         </div>
 
         {/* Premium glass panel with a gold top edge. */}
-        <div className="relative overflow-hidden rounded-2xl border border-amber-500/20 bg-gradient-to-b from-slate-900/95 to-slate-950/95 p-6 text-slate-100 shadow-[0_24px_70px_-20px_rgba(0,0,0,0.85)] ring-1 ring-white/5 side:flex side:min-h-0 side:flex-1 side:flex-col side:p-5">
+        <div className="relative overflow-hidden rounded-2xl border border-amber-500/20 bg-gradient-to-b from-slate-900/95 to-slate-950/95 text-slate-100 shadow-[0_24px_70px_-20px_rgba(0,0,0,0.85)] ring-1 ring-white/5 flex min-h-0 flex-1 flex-col p-4 side:p-5">
           <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-amber-400/70 to-transparent" />
-          {!side && <div className="mb-6 flex gap-1 rounded-xl bg-slate-950/60 p-1 ring-1 ring-slate-700/50">{tabs}</div>}
+          {!side && <div className="mb-4 flex shrink-0 gap-1 rounded-xl bg-slate-950/60 p-1 ring-1 ring-slate-700/50">{tabs}</div>}
 
-          <div className={`side:min-h-0 side:flex-1 ${mode === 'train' ? '' : 'side:overflow-y-auto side:pr-1'}`}>
+          {/* Everything below the tabs scrolls inside the panel, never the page.
+              (Training on wide screens has two panes that scroll on their own.) */}
+          <div className={`min-h-0 flex-1 overflow-y-auto pr-1 ${mode === 'train' ? 'side:overflow-visible side:pr-0' : ''}`}>
           {mode === 'train' ? (
             <TrainingHub initialDrill={openDrill} />
           ) : mode === 'stats' ? (
@@ -221,7 +223,7 @@ function ModeTab({ label, active, onClick }: { label: string; active: boolean; o
   return (
     <button
       onClick={onClick}
-      className={`flex-1 rounded-lg px-3 py-2 text-sm font-semibold transition-all ${
+      className={`flex-1 whitespace-nowrap rounded-lg px-1.5 py-2 text-xs font-semibold transition-all sm:px-3 sm:text-sm ${
         active
           ? 'bg-gradient-to-b from-emerald-500 to-emerald-700 text-white shadow-lg shadow-emerald-900/40 ring-1 ring-emerald-400/40'
           : 'text-slate-300 hover:bg-slate-800/60 hover:text-white'

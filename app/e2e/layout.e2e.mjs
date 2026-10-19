@@ -1,4 +1,4 @@
-// Laptop layout: every screen fits the window — the page itself never scrolls;
+// Laptops and phones: every screen fits the window — the page itself never scrolls;
 // anything taller scrolls inside its own panel — and the button you need next
 // (your actions, "Next hand", a drill's "Next") is always on screen.
 import { BASE_URL, SHOT, launchBrowser } from './env.mjs';
@@ -14,7 +14,10 @@ const errors = [];
 for (const [w, h] of [
   [1366, 657], // the most common laptop, inside a browser window
   [1280, 640],
+  [390, 844], // phones held upright
+  [360, 740],
 ]) {
+  const phone = w < 600;
   const page = await browser.newPage({ viewport: { width: w, height: h } });
   page.setDefaultTimeout(6000);
   page.on('pageerror', (e) => errors.push(e.message));
@@ -33,7 +36,8 @@ for (const [w, h] of [
   await page.goto(BASE_URL);
   await page.click('text=▶ Start');
   await fits('quick game menu');
-  check(`${size} "Start playing" is on screen`, await onScreen(page.getByRole('button', { name: '♠ Start playing' })));
+  // On a phone the form scrolls inside its panel; on a laptop it all fits.
+  if (!phone) check(`${size} "Start playing" is on screen`, await onScreen(page.getByRole('button', { name: '♠ Start playing' })));
   await page.getByRole('button', { name: 'Scenario' }).click();
   await fits('scenarios');
   await page.getByRole('button', { name: '📊 Stats' }).click();
@@ -41,13 +45,16 @@ for (const [w, h] of [
 
   // Training: every drill, before and after answering.
   await page.getByRole('button', { name: 'Training', exact: true }).click();
+  const unfold = page.getByRole('button', { name: /▸ Your training path/ });
+  if (await unfold.count()) await unfold.click(); // phones can fold the path away
   await page.locator('button', { hasText: 'Unlock all levels' }).click();
   for (const lvl of ['1. ', '2. ', '3. ', '4. ', '5. ']) {
     await page.locator('button', { hasText: lvl }).first().click();
     await page.waitForTimeout(150);
     await fits(`drill ${lvl.trim()}`);
     // Answer with the last short button in the drill pane (an answer choice).
-    const pane = page.locator('div.side\\:overflow-y-auto').nth(1);
+    // The drill: everything after the level heading.
+    const pane = phone ? page.locator('div.border-t.border-slate-800.pt-3').last() : page.locator('div.side\\:overflow-y-auto').nth(1);
     const btns = pane.locator('button:not([role="switch"])');
     for (let i = (await btns.count()) - 1; i >= 0; i--) {
       const t = (await btns.nth(i).innerText()).trim();

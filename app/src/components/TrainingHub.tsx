@@ -57,7 +57,7 @@ export function TrainingHub({ initialDrill }: { initialDrill?: DrillId } = {}) {
   function choose(d: DrillId) {
     setDrill(d);
     setToast(null);
-    drillPaneRef.current?.scrollTo({ top: 0 });
+    requestAnimationFrame(toDrillTop);
   }
 
   const mistakes = loadDeck(MISTAKES_DECK);
@@ -87,11 +87,14 @@ export function TrainingHub({ initialDrill }: { initialDrill?: DrillId } = {}) {
 
   const selectedLevel = LEVELS.findIndex((l) => l.drill === drill);
 
-  // The drill pane scrolls on its own on wide screens. After reading a long
-  // explanation further down, "Next" must open the new question at the top.
+  // The drill scrolls inside a panel (its own pane on wide screens, the menu
+  // panel on phones). After reading a long explanation further down, "Next"
+  // must open the new question at the top — whichever panel is scrolling.
   const drillPaneRef = useRef<HTMLDivElement>(null);
+  const drillTopRef = useRef<HTMLDivElement>(null);
+  const toDrillTop = () => drillTopRef.current?.scrollIntoView({ block: 'nearest' });
   function backToTop(e: MouseEvent) {
-    if ((e.target as HTMLElement).closest('[data-next]')) requestAnimationFrame(() => drillPaneRef.current?.scrollTo({ top: 0 }));
+    if ((e.target as HTMLElement).closest('[data-next]')) requestAnimationFrame(toDrillTop);
   }
 
   return (
@@ -202,7 +205,7 @@ export function TrainingHub({ initialDrill }: { initialDrill?: DrillId } = {}) {
       )}
 
       <div className="border-t border-slate-800 pt-3 side:border-t-0 side:pt-0">
-        <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">
+        <div ref={drillTopRef} className="mb-3 scroll-mt-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
           {drill === 'mistakes' ? 'Practise your mistakes' : `Level ${selectedLevel + 1} · ${LEVELS[selectedLevel].title}`}
         </div>
         {drill === 'chen' ? (

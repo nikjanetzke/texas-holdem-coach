@@ -46,6 +46,9 @@ export interface GameSetup {
   botSpeed?: BotSpeed;
 }
 
+/** A pre-pressed action. "checkfold" stays armed for the rest of the hand: check while it's free, fold to any bet. */
+export type QueuedAction = ActionType | 'checkfold';
+
 export interface HandSummaryEntry {
   playerId: string;
   score: number;
@@ -241,13 +244,17 @@ export function useGame(setup: GameSetup) {
   const [dealerSeat, setDealerSeat] = useState(initialSaved?.dealerSeat ?? 0);
   const [handNumber, setHandNumber] = useState(initialSaved?.handNumber ?? 1);
   const [engine, setEngine] = useState<HandEngine | null>(null);
+  // No engine means EITHER the first hand hasn't been dealt yet OR the game is
+  // over — only the latter may show the champion / game-over screen (it used
+  // to flash up for a frame every time a game started).
+  const [gameOver, setGameOver] = useState(false);
   const [advice, setAdvice] = useState<CoachAdvice | null>(null);
   const [handSummary, setHandSummary] = useState<HandSummaryEntry[] | null>(null);
   const [handHistory, setHandHistory] = useState<HandRecord[]>(initialSaved?.handHistory ?? []);
   const [coachEnabled, setCoachEnabled] = useState(initialSaved?.coachEnabled ?? setup.coachDefault ?? false);
   // Pre-press: a fold/check/call the human queued before it was their turn.
   // When their turn arrives it auto-executes if still legal, else is discarded.
-  const [queuedAction, setQueuedAction] = useState<ActionType | null>(null);
+  const [queuedAction, setQueuedAction] = useState<QueuedAction | null>(null);
   const leakTracker = useRef(LeakTracker.fromJSON(initialSaved?.leakCounts));
   const [botSpeed, setBotSpeedState] = useState<BotSpeed>(() => setup.botSpeed ?? loadBotSpeedPref());
   const botSpeedRef = useRef(botSpeed);
@@ -282,9 +289,14 @@ export function useGame(setup: GameSetup) {
   const levelMs = schedule.defaultLevelMinutes * 60 * 1000;
   const levelStartedAtRef = useRef<number>(Date.now());
   const [nowTick, setNowTick] = useState(Date.now());
+  // Pausing freezes the whole table: bots stop, and the blind clock and your
+  // action timer stand still (the paused time is added back on resume).
+  const [paused, setPausedState] = useState(false);
+  const pausedAtRef = useRef<number | null>(null);
+  const clockNow = paused && pausedAtRef.current != null ? pausedAtRef.current : nowTick;
   const currentLevel: BlindLevel = levelAt(schedule, levelIndex);
   const isLastLevel = levelIndex >= schedule.levels.length - 1;
-  const msLeftInLevel = isLastLevel ? Infinity : Math.max(0, levelMs - (nowTick - levelStartedAtRef.current));
+  const msLeftInLevel = isLastLevel ? Infinity : Math.max(0, levelMs - (clockNow - levelStartedAtRef.current));
 
   // Tick once a second so the clock display updates.
   useEffect(() => {
@@ -312,6 +324,7 @@ export function useGame(setup: GameSetup) {
       // freeze that looked like a stuck game, sometimes with a stale "You
       // Win" banner still attached to that last hand's result.
       setEngine(null);
+      setGameOver(true);
       return;
     }
     const level = levelAt(schedule, levelIndexRef.current);
@@ -377,11 +390,29 @@ export function useGame(setup: GameSetup) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentActorId, engine, actionCount]);
-  const actionSecondsLeft = actionDeadline != null ? Math.max(0, Math.ceil((actionDeadline - nowTick) / 1000)) : null;
+  const actionSecondsLeft = actionDeadline != null ? Math.max(0, Math.ceil((actionDeadline - clockNow) / 1000)) : null;
+
+  const setPaused = useCallback((next: boolean) => {
+    if (next) {
+      if (pausedAtRef.current == null) pausedAtRef.current = Date.now();
+    } else if (pausedAtRef.current != null) {
+      // Give back the time spent paused, so nobody loses clock time to it.
+      const away = Date.now() - pausedAtRef.current;
+      levelStartedAtRef.current += away;
+      setActionDeadline((d) => (d != null ? d + away : d));
+      if (turnStartRef.current != null) turnStartRef.current += away;
+      pausedAtRef.current = null;
+      setNowTick(Date.now());
+    }
+    setPausedState(next);
+  }, []);
+  // Toggle from the live state (not a render's copy), so two quick presses —
+  // or a press right after an automatic pause — always do the right thing.
+  const togglePause = useCallback(() => setPaused(pausedAtRef.current == null), [setPaused]);
 
   // Drive AI turns automatically.
   useEffect(() => {
-    if (!engine || engine.isHandOver()) return;
+    if (!engine || engine.isHandOver() || paused) return;
     const actorId = engine.getCurrentActorId();
     if (!actorId || actorId === 'human') return;
     const seat = seatConfigById[actorId];
@@ -410,7 +441,7 @@ export function useGame(setup: GameSetup) {
     // next turn is always scheduled — even when the same bot acts again with
     // an unchanged pot (see actionCount above).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [engine, currentActorId, potTotal, seatConfigById, actionCount]);
+  }, [engine, currentActorId, potTotal, seatConfigById, actionCount, paused]);
 
   // When a hand reaches showdown, settle stacks and record history exactly once.
   // This runs on every render (no dep array) because `engine` mutates in place and
@@ -495,7 +526,7 @@ export function useGame(setup: GameSetup) {
     // Re-check the live turn from the engine (not the render closure) so a stale
     // click or an auto-fold timer firing a tick late can't drive an out-of-turn
     // action — that throws inside the engine and used to white-screen the app.
-    if (!engine || engine.isHandOver() || engine.getCurrentActorId() !== 'human') return;
+    if (!engine || engine.isHandOver() || engine.getCurrentActorId() !== 'human' || pausedAtRef.current != null) return;
     const player = engine.players.find((p) => p.id === 'human')!;
     const valid = engine.getValidActions('human');
     const thinkMs = turnStartRef.current != null ? Math.round(performance.now() - turnStartRef.current) : 0;
@@ -612,7 +643,7 @@ export function useGame(setup: GameSetup) {
   // Pre-press: queue an action for when it becomes the human's turn. Clicking the
   // same queued action again toggles it off. Toggling here does not touch the
   // engine — the execution effect below does that once it's actually our turn.
-  const queueAction = useCallback((type: ActionType) => {
+  const queueAction = useCallback((type: QueuedAction) => {
     setQueuedAction((prev) => (prev === type ? null : type));
   }, []);
 
@@ -620,15 +651,29 @@ export function useGame(setup: GameSetup) {
   // if it's still legal for the current spot (e.g. a queued "call" is discarded
   // if there's now nothing to call, a queued "check" if we're facing a bet).
   useEffect(() => {
-    if (!queuedAction || currentActorId !== 'human' || !engine || engine.isHandOver()) return;
+    if (!queuedAction || currentActorId !== 'human' || !engine || engine.isHandOver() || paused) return;
     const valid = engine.getValidActions('human');
+    if (queuedAction === 'checkfold') {
+      // Stays armed for the rest of the hand: check while it's free; the
+      // moment someone bets, fold (and that's the end of it).
+      if (valid.types.includes('check')) {
+        humanAct('check');
+      } else {
+        humanAct('fold');
+        setQueuedAction(null);
+      }
+      return;
+    }
     if (valid.types.includes(queuedAction)) {
       humanAct(queuedAction);
     }
     // Legal or not, the pre-press is consumed once our turn arrives.
     setQueuedAction(null);
+    // actionCount: you can be the next to act again with no change of actor
+    // (checking to close a round, then first to act on the next) — Check/Fold
+    // must fire then too.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [queuedAction, currentActorId, engine]);
+  }, [queuedAction, currentActorId, engine, actionCount, paused]);
 
   // Auto-act for the human once their action timer expires: check if free, otherwise fold.
   useEffect(() => {
@@ -689,6 +734,7 @@ export function useGame(setup: GameSetup) {
     getSessionReport,
     sessionId,
     engine,
+    gameOver,
     potTotal,
     currentActorId,
     advice,
@@ -698,6 +744,9 @@ export function useGame(setup: GameSetup) {
     humanAct,
     queuedAction,
     queueAction,
+    paused,
+    setPaused,
+    togglePause,
     nextHand,
     stacks,
     handHistory,

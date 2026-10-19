@@ -97,7 +97,7 @@ for (let i = 0; i < 2000; i++) {
   if (await next.count()) await next.first().click().catch(() => {});
   await page.waitForTimeout(120);
 }
-const reads = page.getByRole('button', { name: '🔍 Reads' });
+const reads = page.getByRole('button', { name: 'Reads', exact: true });
 check('"🔍 Reads" button shown with the coach on', (await reads.count()) === 1);
 await reads.click();
 const notes = page.getByRole('dialog', { name: 'Notes on your opponents' });

@@ -2,7 +2,7 @@ import { type CSSProperties, type ReactNode, useCallback, useEffect, useMemo, us
 import type { GameSetup, HandRecord } from '../hooks/useGame';
 import { SpeedPicker } from './SpeedPicker';
 import { useGame } from '../hooks/useGame';
-import { HandHistoryPanel, HandReplay } from './HandHistoryPanel';
+import { HandHistoryPanel, HandReplay, LastHandReview } from './HandHistoryPanel';
 import { OpponentNotes, type OpponentEntry } from './OpponentNotes';
 import { readOpponent } from '../training/opponentNotes';
 import { StatsPanel } from './StatsPanel';
@@ -43,6 +43,7 @@ const ACTION_SOUND: Record<ActionType, SfxName> = {
 export function Table({ setup, onExit }: { setup: GameSetup; onExit: (practiseDrill?: DrillId) => void }) {
   const {
     engine,
+    gameOver,
     potTotal,
     currentActorId,
     advice,
@@ -52,6 +53,9 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: (practiseDr
     humanAct,
     queuedAction,
     queueAction,
+    paused,
+    setPaused,
+    togglePause,
     nextHand,
     stacks,
     handHistory,
@@ -82,8 +86,8 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: (practiseDr
   const [showMath, setShowMath] = useState(false);
   const [openPanel, setOpenPanel] = useState<'stats' | 'progress' | 'history' | 'export' | null>('stats');
   const [showMenu, setShowMenu] = useState(false);
-  // Auto-advance defaults on (paused = false); the setup screen can flip these.
-  const [paused, setPaused] = useState(!(setup.autoAdvanceDefault ?? true));
+  // Deal the next hand automatically after a result (setup screen / ⋯ menu).
+  const [autoNext, setAutoNext] = useState(setup.autoAdvanceDefault ?? true);
   const [speechOn, setSpeechOn] = useState(setup.speechDefault ?? false);
 
   // Honour a "speech on by default" choice from the setup screen.
@@ -97,6 +101,7 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: (practiseDr
   const [strategyOpen, setStrategyOpen] = useState(false);
   const [positionOpen, setPositionOpen] = useState(false);
   const [replayRecord, setReplayRecord] = useState<HandRecord | null>(null);
+  const [lastHandOpen, setLastHandOpen] = useState(false);
   // Opponent notes: open (undefined = closed), optionally focused on one player.
   const [notesFor, setNotesFor] = useState<string | null | undefined>(undefined);
   const scenarioStrategy = setup.scenarioId ? SCENARIO_STRATEGIES[setup.scenarioId] : undefined;
@@ -159,8 +164,11 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: (practiseDr
   // stay out of the way while typing in chat or with a dialog open.
   // Coaching dialogs only count while the coach is on — turning it off hides them,
   // and a hidden dialog mustn't keep blocking shortcuts and auto-advance.
-  const coachDialogOpen = coachEnabled && (positionOpen || notesFor !== undefined);
+  const coachDialogOpen = coachEnabled && (positionOpen || notesFor !== undefined || lastHandOpen);
   const anyDialogOpen = showMenu || showReport || strategyOpen || chatOpen || !!replayRecord || coachDialogOpen;
+
+  // The most recent finished hand that isn't the one on the table now.
+  const previousHand = handHistory.find((h) => h.handNumber !== handNumber) ?? null;
 
   // What you know about each opponent (coaching UI: only used while the coach is on).
   const opponents: OpponentEntry[] = useMemo(
@@ -176,6 +184,13 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: (practiseDr
     if (!engine) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.ctrlKey || e.metaKey || e.altKey || anyDialogOpen) return;
+      const tagName = (e.target as HTMLElement | null)?.tagName;
+      if (e.key.toLowerCase() === 'p' && tagName !== 'INPUT' && tagName !== 'TEXTAREA') {
+        e.preventDefault();
+        togglePause();
+        return;
+      }
+      if (paused) return; // the table is frozen
       const tag = (e.target as HTMLElement | null)?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
       const k = e.key.toLowerCase();
@@ -328,7 +343,7 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: (practiseDr
     if (currentActorId !== 'human') spokenTurnRef.current = -1;
   }, [currentActorId]);
 
-  // Auto-advance to the next hand after a hand ends, unless paused. Long enough
+  // Auto-advance to the next hand after a hand ends. Long enough
   // to actually read what happened (cards, opponents' final bets, the result
   // panel) — 3.5s was too tight to read a multi-way hand's action before the
   // board was whisked away for the next deal.
@@ -338,16 +353,28 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: (practiseDr
   // Scales with the chosen game speed: someone who picked "fast" opponents
   // doesn't want to wait as long between hands either.
   const AUTO_ADVANCE_MS = botSpeed === 'fast' ? 4000 : botSpeed === 'relaxed' ? 8500 : 6500;
+  // Switching tabs or minimising pauses the game, so you never come back to
+  // hands played (or a timer run out) while you were away.
+  useEffect(() => {
+    const onVisibility = () => {
+      if (document.hidden) setPaused(true);
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
+  }, [setPaused]);
+
   const nextHandRef = useRef(nextHand);
   nextHandRef.current = nextHand;
   const handOver = !!engine && engine.isHandOver();
   // Held while a dialog is open (e.g. replaying this hand), so the next hand
-  // never deals behind something you're reading.
+  // never deals behind something you're reading. With the coach on it never
+  // runs: the result and the coach's scores stay up until you click "Next hand".
+  const autoNextActive = autoNext && !coachEnabled;
   useEffect(() => {
-    if (!handOver || paused || anyDialogOpen) return;
+    if (!handOver || !autoNextActive || paused || anyDialogOpen) return;
     const t = setTimeout(() => nextHandRef.current(), AUTO_ADVANCE_MS);
     return () => clearTimeout(t);
-  }, [handOver, paused, handNumber, AUTO_ADVANCE_MS, anyDialogOpen]);
+  }, [handOver, autoNextActive, paused, handNumber, AUTO_ADVANCE_MS, anyDialogOpen]);
 
   // The win celebration (coin burst + gif + banner) is deliberately delayed and
   // then auto-dismissed, rather than appearing instantly and staying up the
@@ -400,12 +427,16 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: (practiseDr
     }
   }
 
+  if (!engine && !gameOver) {
+    // The first hand is being dealt.
+    return <div className="flex h-[100dvh] items-center justify-center bg-slate-950 text-slate-400">Shuffling up…</div>;
+  }
   if (!engine) {
     // The game can't continue: either you busted (game over) or you're the last
     // player with chips (champion). We remembered your last stack below.
     const won = lastHumanStackRef.current > 0;
     return (
-      <div className="relative flex min-h-[100dvh] flex-col items-center justify-center overflow-hidden bg-slate-950 px-4 text-center">
+      <div className="relative flex h-[100dvh] flex-col items-center justify-center overflow-hidden bg-slate-950 px-4 py-4 text-center">
         <div
           className={`pointer-events-none absolute inset-0 ${
             won
@@ -414,7 +445,8 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: (practiseDr
           }`}
         />
         {won && <CoinBurst />}
-        <div className="animate-pop relative w-full max-w-md overflow-hidden rounded-2xl border border-amber-500/20 bg-gradient-to-b from-slate-900/95 to-slate-950/95 p-8 shadow-[0_24px_70px_-20px_rgba(0,0,0,0.85)] ring-1 ring-white/5">
+        {/* The result card scrolls inside itself if the session report is tall — the page never does. */}
+        <div className="animate-pop relative max-h-full w-full max-w-md overflow-y-auto rounded-2xl border border-amber-500/20 bg-gradient-to-b from-slate-900/95 to-slate-950/95 p-8 shadow-[0_24px_70px_-20px_rgba(0,0,0,0.85)] ring-1 ring-white/5">
           <div className={`pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent ${won ? 'via-amber-400/70' : 'via-rose-500/60'} to-transparent`} />
           {won ? (
             <>
@@ -500,7 +532,7 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: (practiseDr
 
   return (
     <div
-      className="mx-auto flex min-h-[100dvh] max-w-5xl flex-col overflow-x-hidden px-3 py-2 sm:px-4 side:h-[100dvh] side:max-w-[1600px] side:overflow-hidden"
+      className="mx-auto flex h-[100dvh] max-w-5xl flex-col overflow-hidden px-3 py-2 sm:px-4 side:max-w-[1600px]"
       style={{
         paddingTop: 'max(0.5rem, env(safe-area-inset-top))',
         paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))',
@@ -560,6 +592,7 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: (practiseDr
               setCoachEnabled((v) => !v);
               setNotesFor(undefined);
               setPositionOpen(false);
+              setLastHandOpen(false);
             }}
             className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold transition-colors sm:text-sm ${
               coachEnabled ? 'bg-indigo-600 text-white hover:bg-indigo-500' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
@@ -568,13 +601,24 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: (practiseDr
           >
             🎓 Coach <span className={coachEnabled ? 'text-emerald-300' : 'text-slate-500'}>{coachEnabled ? 'On' : 'Off'}</span>
           </button>
+          {coachEnabled && previousHand && (
+            <button
+              onClick={() => setLastHandOpen(true)}
+              className="flex items-center gap-1 rounded-full bg-slate-800 px-2.5 py-1 text-xs font-semibold text-slate-200 transition-colors hover:bg-slate-700 sm:text-sm"
+              title="The coach's notes on your previous hand"
+              aria-label="Last hand"
+            >
+              ◀<span className="hidden sm:inline"> Last hand</span>
+            </button>
+          )}
           {coachEnabled && opponents.length > 0 && (
             <button
               onClick={() => setNotesFor(null)}
               className="flex items-center gap-1 rounded-full bg-slate-800 px-2.5 py-1 text-xs font-semibold text-slate-200 transition-colors hover:bg-slate-700 sm:text-sm"
               title="Notes on how each opponent plays, and how to beat them"
+              aria-label="Reads"
             >
-              🔍 Reads
+              🔍<span className="hidden sm:inline"> Reads</span>
             </button>
           )}
           <button
@@ -583,8 +627,9 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: (practiseDr
               muted ? 'bg-slate-800 text-slate-400 hover:bg-slate-700' : 'bg-emerald-700 text-white hover:bg-emerald-600'
             }`}
             title="Toggle sound effects"
+            aria-label={muted ? 'Sound off' : 'Sound on'}
           >
-            {muted ? '🔇 Sound Off' : '🔊 Sound On'}
+            {muted ? '🔇' : '🔊'}<span className="hidden sm:inline">{muted ? ' Sound Off' : ' Sound On'}</span>
           </button>
           {speechSupported() && (
             <button
@@ -598,8 +643,9 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: (practiseDr
                 speechOn ? 'bg-indigo-600 text-white hover:bg-indigo-500' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
               }`}
               title="Read your turn (and the coach's advice, when the coach is on) aloud"
+              aria-label={speechOn ? 'Voice on' : 'Voice off'}
             >
-              {speechOn ? '🗣 Voice On' : '🔕 Voice Off'}
+              {speechOn ? '🗣' : '🔕'}<span className="hidden sm:inline">{speechOn ? ' Voice On' : ' Voice Off'}</span>
             </button>
           )}
           <button
@@ -612,20 +658,22 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: (practiseDr
             💬
           </button>
           <button
-            onClick={() => setPaused((v) => !v)}
-            className={`rounded-full px-2 py-0.5 text-xs font-semibold transition-colors ${
+            onClick={togglePause}
+            className={`rounded-full px-2.5 py-0.5 text-xs font-semibold transition-colors ${
               paused ? 'bg-amber-600 text-white hover:bg-amber-500' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
             }`}
-            title={paused ? 'Auto-advance paused — tap to resume' : 'Pause auto-advance between hands'}
+            title={paused ? 'Resume the game (P)' : 'Pause the game (P)'}
+            aria-label={paused ? 'Resume the game' : 'Pause the game'}
           >
-            {paused ? '▶' : '⏸'}
+            {paused ? '▶' : '⏸'}<span className="hidden sm:inline">{paused ? ' Resume' : ' Pause'}</span>
           </button>
           <button
             onClick={toggleFullscreen}
             className="flex items-center gap-1 rounded-lg bg-slate-700 px-2.5 py-1 text-xs font-semibold text-slate-100 ring-1 ring-slate-500 hover:bg-slate-600"
             title="Toggle fullscreen"
+            aria-label="Full screen"
           >
-            <span className="text-sm">⛶</span> Full
+            <span className="text-sm">⛶</span><span className="hidden sm:inline"> Full</span>
           </button>
           <button
             onClick={() => setShowMenu(true)}
@@ -694,7 +742,7 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: (practiseDr
           looks better and keeps the action buttons always visible. */}
       <div className="flex min-h-0 flex-1 flex-col gap-2 side:flex-row side:items-stretch">
         {/* Felt — hugs the canvas when stacked, fills the cell when side-by-side. */}
-        <div ref={feltRef} className="mx-auto flex w-full max-w-4xl items-center justify-center overflow-hidden side:min-h-0 side:max-w-none side:flex-1">
+        <div ref={feltRef} className="mx-auto flex w-full max-w-4xl shrink-0 items-center justify-center overflow-hidden side:min-h-0 side:max-w-none side:flex-1 side:shrink">
         <PokerCanvas
           width={canvasSize.width}
           height={canvasSize.height}
@@ -740,10 +788,10 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: (practiseDr
         />
         </div>
 
-        {/* Controls/info: a side column that scrolls on its own on laptops and
-            sideways phones (the page never scrolls there), full-width below
-            the table otherwise. */}
-        <div className="mx-auto flex w-full max-w-4xl flex-col gap-2 side:mx-0 side:w-[340px] side:max-w-none side:shrink-0 side:overflow-y-auto side:pb-2 min-[1200px]:side:w-[390px]">
+        {/* Controls/info: a column that scrolls on its own (the page never
+            scrolls) — beside the table on laptops and sideways phones, below
+            it on phones held upright. Your action buttons stay pinned on top. */}
+        <div className="mx-auto flex min-h-0 w-full max-w-4xl flex-1 flex-col gap-2 overflow-y-auto pb-2 side:mx-0 side:w-[340px] side:max-w-none side:flex-none side:shrink-0 min-[1200px]:side:w-[390px]">
 
       {/* Starting-hand rating (click to expand) */}
       {coachEnabled && engine.street === 'preflop' && human.holeCards.length === 2 && !isHandOver && (
@@ -820,7 +868,7 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: (practiseDr
           panel can never push the buttons below the fold. */}
       {!isHandOver && !human.folded && (
         <div
-          className={`animate-fade-up order-first mt-2 rounded-xl border bg-slate-900/90 p-3 side:sticky side:top-0 side:z-10 side:mt-0 side:bg-slate-900 ${
+          className={`animate-fade-up order-first mt-2 rounded-xl border bg-slate-900/90 p-3 sticky top-0 z-10 bg-slate-900 side:mt-0 ${
             validActions ? 'border-emerald-600/50 ring-1 ring-emerald-500/30' : 'border-slate-700'
           }`}
         >
@@ -828,9 +876,11 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: (practiseDr
             <span className={`text-sm font-bold ${validActions ? 'text-emerald-300' : 'text-slate-400'}`}>
               {validActions
                 ? '● Your turn'
-                : queuedAction
-                  ? `○ Pre-press queued: ${queuedAction} — will play on your turn`
-                  : '○ Waiting — tap to pre-press'}
+                : queuedAction === 'checkfold'
+                  ? '○ Check/Fold on — checking while it’s free, folding if anyone bets (this hand)'
+                  : queuedAction
+                    ? `○ Pre-press queued: ${queuedAction} — will play on your turn`
+                    : '○ Waiting — tap to pre-press'}
             </span>
             <span className="flex items-center gap-2">
               {positionInfo && (
@@ -860,6 +910,14 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: (practiseDr
                 tone="danger"
                 active={queuedAction === 'fold'}
                 onClick={() => queueAction('fold')}
+              />
+              {/* Stays on for the rest of the hand: check whenever it's free,
+                  fold the moment anyone bets. */}
+              <ActionButton
+                label="Check/Fold"
+                tone="neutral"
+                active={queuedAction === 'checkfold'}
+                onClick={() => queueAction('checkfold')}
               />
               <ActionButton
                 label="Check"
@@ -902,7 +960,7 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: (practiseDr
                 max={validActions.maxRaiseTo}
                 value={raiseAmount}
                 onChange={(e) => setRaiseAmount(Number(e.target.value))}
-                className="h-1.5 flex-1 accent-emerald-500"
+                className="h-1.5 min-w-0 flex-1 accent-emerald-500"
               />
               <span className="w-20 shrink-0 text-right font-mono text-sm font-bold text-amber-200">${raiseAmount.toLocaleString()}</span>
             </div>
@@ -938,7 +996,7 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: (practiseDr
           </div>
           {/* Only on devices with a real keyboard and mouse. */}
           <div className="mt-1.5 hidden text-[11px] text-slate-500 [@media(hover:hover)_and_(pointer:fine)]:block">
-            ⌨ F fold · C check/call · R bet/raise · A all in · N next hand
+            ⌨ F fold · C check/call · R bet/raise · A all in · N next hand · P pause
           </div>
           </>
           )}
@@ -1054,6 +1112,9 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: (practiseDr
                 ↺ Replay this hand
               </button>
             )}
+            {coachEnabled && (
+              <span className="self-center text-xs text-slate-500">Take your time — the next hand waits for you while the coach is on.</span>
+            )}
           </div>
         </div>
       )}
@@ -1136,6 +1197,36 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: (practiseDr
         <OpponentNotes opponents={opponents} focusId={notesFor} onClose={() => setNotesFor(undefined)} />
       )}
 
+      {/* Paused: the whole table is frozen (bots, blind clock, your timer). */}
+      {paused && (
+        <div className="fixed inset-0 z-30 flex items-center justify-center bg-slate-950/75 p-4 backdrop-blur-[2px]">
+          <div role="dialog" aria-label="Game paused" className="animate-pop rounded-2xl border border-amber-500/30 bg-slate-900/95 px-8 py-6 text-center shadow-2xl">
+            <div className="text-3xl">⏸</div>
+            <div className="mt-1 text-xl font-bold text-slate-100">Game paused</div>
+            <p className="mt-1 text-sm text-slate-400">Opponents, the blind clock and your timer are all stopped.</p>
+            <button
+              autoFocus
+              onClick={() => setPaused(false)}
+              className="mt-4 rounded-xl bg-gradient-to-b from-emerald-500 to-emerald-700 px-8 py-2.5 font-bold text-white shadow-lg ring-1 ring-emerald-400/40 hover:from-emerald-400 hover:to-emerald-600"
+            >
+              ▶ Resume
+            </button>
+            <p className="mt-2 text-[11px] text-slate-500">or press P</p>
+          </div>
+        </div>
+      )}
+
+      {coachEnabled && lastHandOpen && previousHand && (
+        <LastHandReview
+          record={previousHand}
+          onClose={() => setLastHandOpen(false)}
+          onReplay={() => {
+            setLastHandOpen(false);
+            setReplayRecord(previousHand);
+          }}
+        />
+      )}
+
       {replayRecord && <HandReplay record={replayRecord} coachEnabled={coachEnabled} onClose={() => setReplayRecord(null)} />}
 
       {/* Hand history & export live in a modal (opened from the ⋯ button) so they
@@ -1159,6 +1250,26 @@ export function Table({ setup, onExit }: { setup: GameSetup; onExit: (practiseDr
               <div className="mb-1.5 text-sm font-semibold text-slate-200">Game speed</div>
               <SpeedPicker value={botSpeed} onChange={setBotSpeed} />
               <p className="mt-1.5 text-xs text-slate-400">How quickly opponents act, and how long the result stays up between hands.</p>
+              <label className="mt-3 flex items-center justify-between gap-3 border-t border-slate-700 pt-3">
+                <span>
+                  <span className="block text-sm font-semibold text-slate-200">Auto next hand</span>
+                  <span className="block text-xs text-slate-400">
+                    {coachEnabled
+                      ? 'Off while the coach is on — the next hand waits until you’ve read the result and click “Next hand”.'
+                      : 'Deal the next hand automatically after each result.'}
+                  </span>
+                </span>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={autoNext}
+                  aria-label="Auto next hand"
+                  onClick={() => setAutoNext((v) => !v)}
+                  className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${autoNext ? 'bg-emerald-600' : 'bg-slate-600'}`}
+                >
+                  <span className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white transition-transform ${autoNext ? 'translate-x-5' : 'translate-x-0'}`} />
+                </button>
+              </label>
             </div>
             <div className="space-y-2">
               <Collapsible

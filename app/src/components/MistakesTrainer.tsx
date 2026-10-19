@@ -251,7 +251,7 @@ export function MistakesTrainer() {
             )}
           </div>
 
-          <div className="flex gap-2 bg-slate-900 side:sticky side:bottom-0 side:z-10 side:shadow-[0_-10px_18px_rgba(2,6,23,0.95)]">
+          <div className="flex gap-2 bg-slate-900 sticky bottom-0 z-10 shadow-[0_-10px_18px_rgba(2,6,23,0.95)]">
             <button data-next onClick={next} className="flex-1 rounded-lg bg-emerald-600 py-2 font-semibold text-white transition-colors hover:bg-emerald-500">
               Next spot →
             </button>
