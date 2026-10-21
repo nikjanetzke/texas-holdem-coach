@@ -1,0 +1,14 @@
+{
+  "name": "Poker IQ — Texas Hold'em Coach",
+  "short_name": "Poker IQ",
+  "description": "Practice Texas Hold'em hands with plain-English coaching.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#020617",
+  "theme_color": "#020617",
+  "icons": [
+    { "src": "/assets/poker-iq-splash.jpg", "sizes": "1280x720", "type": "image/jpeg", "purpose": "any" }
+  ]
+}

@@ -1,0 +1,311 @@
+{
+  "kind": "Original generated deployment output, not editable source",
+  "repository": "nikjanetzke/texas-holdem-coach",
+  "source_commit": "3d052bd602f1117ead354077ecfac92612dcad21",
+  "source_branch": "backup/live-20261021-poker-source",
+  "source_tag": "backup-poker-live-20261021",
+  "cloudflare": {
+    "id": "231eb98c-9554-41c1-990a-00ea41c4bd45",
+    "url": "https://231eb98c.texas-holdem-coach.pages.dev",
+    "environment": "production",
+    "created_on": "2026-10-20T21:25:22.505932Z",
+    "deployment_trigger": {
+      "type": "ad_hoc",
+      "metadata": {
+        "branch": "main",
+        "commit_hash": "3d052bd602f1117ead354077ecfac92612dcad21",
+        "commit_message": "Real pause, Check/Fold, coach-on results wait, Last hand, no scrolling on phones\r\n\r\n- Pause (\u23f8 button or P) now freezes the whole table: bots stop, and the\r\n  blind clock and your action timer stand still (the time is given back\r\n  on resume). Switching tabs or minimising pauses automatically. \"Auto\r\n  next hand\" moved to the \u22ef menu as a switch.\r\n- Check/Fold pre-press: stays o\n\n[commit_message truncated]",
+        "commit_dirty": false
+      }
+    },
+    "latest_stage": {
+      "name": "deploy",
+      "started_on": null,
+      "ended_on": "2026-10-20T21:25:24.313399Z",
+      "status": "success"
+    },
+    "aliases": [
+      "https://poker.buildai.nz",
+      "https://www.poker.buildai.nz"
+    ]
+  },
+  "files": [
+    {
+      "path": "assets/BitmapFont-BU6aT20R.js",
+      "bytes": 64,
+      "sha256": "2f70870bd855aecbc44eccbb398b96142a650360b26883af6768e5ed801a11e0"
+    },
+    {
+      "path": "assets/BufferResource-DEAdXkPu.js",
+      "bytes": 10564,
+      "sha256": "3498f8fc3981db3c822a8341edc6caff61557da46bbf22a801d44308f94d152a"
+    },
+    {
+      "path": "assets/Cache-JQ9WERRL.js",
+      "bytes": 1098,
+      "sha256": "5ae9e373e8fcf571015c9c2dc276c5c04948c6b782f2d45b97228b60bfa62722"
+    },
+    {
+      "path": "assets/CanvasPool-LpiqEN27.js",
+      "bytes": 756,
+      "sha256": "035e4695eca3fcfa687697629d1f3110ea1640601b52adc0357ddefa82bb0d05"
+    },
+    {
+      "path": "assets/CanvasRenderer-DGX6E6A7.js",
+      "bytes": 68,
+      "sha256": "66324dc2dd4b416ed391951dd6b52f6653697d46d1c58c8b133bcf77d1045db5"
+    },
+    {
+      "path": "assets/FederatedEventTarget-Dzw7bm73.js",
+      "bytes": 42542,
+      "sha256": "df1808ebd7c4f5e7f4f3302cb8d87b4812aa0e218423fc7090ec1b302778f5bc"
+    },
+    {
+      "path": "assets/Filter-lM8MnAMJ.js",
+      "bytes": 38750,
+      "sha256": "a8297d3b20e7ba914bc936ac09b3fb1ec4816db1b1920c6f0967d766e0e30e4a"
+    },
+    {
+      "path": "assets/FilterSystem-BVYrCu-u.js",
+      "bytes": 39354,
+      "sha256": "9bff80b958afd7184495cf31642ba11f27cc7437486aec76086fbe5fd07ad405"
+    },
+    {
+      "path": "assets/GCManagedHash-Boe4jiin.js",
+      "bytes": 25455,
+      "sha256": "36d4cc6a33f93b3fc2f893684fb8409f545d6522f02b031bae4bb929bdbc53cd"
+    },
+    {
+      "path": "assets/Geometry-DpSaRhAE.js",
+      "bytes": 62515,
+      "sha256": "34404ddb9d23b7312f45d65a440129f9e5bedf624433f541c38fe5b0c78aab27"
+    },
+    {
+      "path": "assets/GraphicsContext-DbZeWC5x.js",
+      "bytes": 53767,
+      "sha256": "f2df9b8b16ad38a0b975104e9780d536da5a37c98653c0dd25f52b3f63870434"
+    },
+    {
+      "path": "assets/RenderTargetSystem-hKDrxsG5.js",
+      "bytes": 51759,
+      "sha256": "f6f9baf7daa36307341603a22fa1c09119161e52504c50315cb3ebbf5eb08882"
+    },
+    {
+      "path": "assets/Table-D2T8P6T6.js",
+      "bytes": 347160,
+      "sha256": "bb2a47535f02945876341f1819bc59ab5f73d48ec9d81d75f27d47827db9fe37"
+    },
+    {
+      "path": "assets/WebGLRenderer-BKehnQSl.js",
+      "bytes": 67,
+      "sha256": "f5cd68188d003654a2af35f6e8305b546fc40e3d05bd886a4a0aab1ab0412e2c"
+    },
+    {
+      "path": "assets/WebGPURenderer-Be9MjjS7.js",
+      "bytes": 68,
+      "sha256": "09bd6759e520da4ed94aaaa4b100b742a6fc19d023390d62a3e9eebebf3a8c78"
+    },
+    {
+      "path": "assets/browserAll-BzlCfknz.js",
+      "bytes": 282,
+      "sha256": "239f212e64ad6f4c3b8442359c60c4884303de9b267bcd27f016564cd7efc126"
+    },
+    {
+      "path": "assets/canvasUtils-BcEth085.js",
+      "bytes": 6020,
+      "sha256": "4e1de170d5e2c324d807a7d0d37738899bcf7b2204bcb5adea1c7b92ab7555e3"
+    },
+    {
+      "path": "assets/getTextureBatchBindGroup-BMbaMZNA.js",
+      "bytes": 342,
+      "sha256": "b1dcbfb33930952781400a461fac9195b59f9efcf05206d420426d5d2aae4280"
+    },
+    {
+      "path": "assets/green-felt-poker-table.jpg",
+      "bytes": 165077,
+      "sha256": "4e0f3518ef3b7d40d2be7872868b704b678e45b70d83110b6af26c674fe745c3"
+    },
+    {
+      "path": "assets/index-C3uDxnW9.css",
+      "bytes": 72552,
+      "sha256": "aa141824be4557297b9295eb7078f0236ad29075d7964698d1f4b8967fe989a9"
+    },
+    {
+      "path": "assets/index-CwLbveF5.js",
+      "bytes": 361473,
+      "sha256": "c4b3f7c7b6bf177db4428b905abff12ea60775b7f235dc7a6ee09f01bae805c3"
+    },
+    {
+      "path": "assets/init-dGt-Rs6x.js",
+      "bytes": 124,
+      "sha256": "88733d207414e1e5a480b7fc134494bea0c1b7bfaa73f229661f9e4a55d59091"
+    },
+    {
+      "path": "assets/poker-animation.gif",
+      "bytes": 356178,
+      "sha256": "fcc6a174e8bae7b4f535b434fe4490d39143518a83ccbf6570bc317f3b91c5d8"
+    },
+    {
+      "path": "assets/poker-iq-splash.jpg",
+      "bytes": 172088,
+      "sha256": "c579eddef5ce5bd5fddf3da18b4e3ce779c2c808ce20f9c7f2ffe18a137f2577"
+    },
+    {
+      "path": "assets/rolldown-runtime-Bh1tDfsg.js",
+      "bytes": 567,
+      "sha256": "1b13387cb23dc39bf70e31677c21f6db5cad3377b96f286b6ee444496e5bfea7"
+    },
+    {
+      "path": "assets/webworkerAll-B_5JEOL-.js",
+      "bytes": 62,
+      "sha256": "8d2b5b68ed22f74a79af4e5a8be87448489932ad9d40b16ddefdd50f438f3286"
+    },
+    {
+      "path": "avatars/README.md",
+      "bytes": 1153,
+      "sha256": "da1fa18391376a184f43bf564ea40f716b9a9fa5be85afd0a6038a06e267b1e1"
+    },
+    {
+      "path": "avatars/bruno.jpg",
+      "bytes": 12560,
+      "sha256": "2c3087a02f7911a730dfd689bf71cbc14ded413e096a3aff4b0a03d2fec7bb4f"
+    },
+    {
+      "path": "avatars/cypher.jpg",
+      "bytes": 11176,
+      "sha256": "fc0e9c14407c00d56f1f978a4fb8a2857766fd6d06bdad7a0b1a52ecf5a0bde7"
+    },
+    {
+      "path": "avatars/danny.jpg",
+      "bytes": 11756,
+      "sha256": "2252da772e8283f27ba9eaffc3060ad9513127bc7ff13370f867e7315516de94"
+    },
+    {
+      "path": "avatars/eleanor.jpg",
+      "bytes": 14545,
+      "sha256": "7fac7ac25f25b202d4ce4f972da46968e0bfb2742f95dd6cf3b5fa7ecf56e617"
+    },
+    {
+      "path": "avatars/ghost.jpg",
+      "bytes": 10133,
+      "sha256": "987d6c2da833354e92d15a3cad3c4d9d36409c5b4249194a752b93fafe47ca1f"
+    },
+    {
+      "path": "avatars/leo.jpg",
+      "bytes": 14647,
+      "sha256": "6624e2cc2c8dd9d64e09381f8570b8510856d6718534fc1e9ae28629538845a3"
+    },
+    {
+      "path": "avatars/marco.jpg",
+      "bytes": 11807,
+      "sha256": "fa8abd00b8c6c1ebcfcd6e584dc4cce2af53a34e738fd755cd61ac95576f28db"
+    },
+    {
+      "path": "avatars/nadia.jpg",
+      "bytes": 14794,
+      "sha256": "3f1fdc56adeacd9c87cfaeb8c15859dbe8de3a0bad0f8e6613700d78e3eaaba9"
+    },
+    {
+      "path": "avatars/professor.jpg",
+      "bytes": 13737,
+      "sha256": "cea511af41b501c3afad7f5abc54998092fa2d3479805d41c78fcba9204a3a4a"
+    },
+    {
+      "path": "avatars/raven.jpg",
+      "bytes": 9619,
+      "sha256": "2c56d67287989175f0e237f9d29b49c18460c5cb64c5699b71e6a11d2d094c86"
+    },
+    {
+      "path": "avatars/rookie.jpg",
+      "bytes": 11460,
+      "sha256": "d22b747fef77de8b652fa2aa7626c8694387feb0ff5f83eb395ae3fa1049a8dc"
+    },
+    {
+      "path": "avatars/spike.jpg",
+      "bytes": 10187,
+      "sha256": "dfc6f4f613bba96277846973791b59ff5d339f8507a22f83fdcfa956ec7bd6d8"
+    },
+    {
+      "path": "avatars/tex.jpg",
+      "bytes": 14092,
+      "sha256": "85ae5c94928d4d8e984e5bcf7d68559efa3f79e426b8f6961dabbd89f94216c2"
+    },
+    {
+      "path": "avatars/vivian.jpg",
+      "bytes": 12366,
+      "sha256": "497a0709e919e9d833ef66bb4fd5cb43c629204be96648d41f1f99edf8e3f287"
+    },
+    {
+      "path": "favicon.svg",
+      "bytes": 9522,
+      "sha256": "61bc9a161de58248288e6905425d7180f0624c2865007b97d763fdac12043a66"
+    },
+    {
+      "path": "icons.svg",
+      "bytes": 5031,
+      "sha256": "b45fa506195cfcdef406ba9f0c77b36ddc1a7c224040926ec70abc2fdea7b93a"
+    },
+    {
+      "path": "index.html",
+      "bytes": 1138,
+      "sha256": "8f92162c27eecba3917528116242c51790a6b09468804e1524ab27daaa6a7647"
+    },
+    {
+      "path": "manifest.webmanifest",
+      "bytes": 433,
+      "sha256": "1fb1fe8f58655a12ce96d67c3b840a8754f142ddc1c32390b21f8732fe1f675d"
+    },
+    {
+      "path": "sounds/README.md",
+      "bytes": 1331,
+      "sha256": "a872832ca023a700172681e2b8a691d90f445eb6bee82a2d894f97c794ce592d"
+    }
+  ],
+  "verification": {
+    "file_count": 46,
+    "total_bytes": 2000239,
+    "http_checks": 92,
+    "exact_matches": 91,
+    "edge_normalized_matches": 92,
+    "mismatches": [],
+    "host_controls_present": [],
+    "origins": [
+      "https://poker.buildai.nz",
+      "https://231eb98c.texas-holdem-coach.pages.dev"
+    ],
+    "all_public_output_files_checked": true,
+    "checks_report": "/opt/data/reports/poker-backup-20261021/original-live-checks.json"
+  },
+  "rebuild": {
+    "node": "22.23.3",
+    "npm": "9.2.0",
+    "install": "npm ci --no-audit --no-fund",
+    "tests": "176 passed across 19 files",
+    "build": "tsc -b && vite build passed",
+    "byte_reproducible": true,
+    "files": 46,
+    "lockfile_sha256": "e71c71fd08e9679fb35c0c444356e4674e8c139cee023d2debbc772663ff92dc",
+    "logs": [
+      "/opt/data/reports/poker-backup-20261021/npm-ci.log",
+      "/opt/data/reports/poker-backup-20261021/tests.log",
+      "/opt/data/reports/poker-backup-20261021/build.log"
+    ]
+  },
+  "secret_scan": {
+    "method": "Custom byte-level credential signatures, sensitive filenames, secret assignments, and literal/base64 matches to locally configured credential values; never outputs values",
+    "source_files": 135,
+    "artifact_files": 46,
+    "findings": [],
+    "scope": "Selected source tree and every original build file; not full historical audit",
+    "gitleaks": "Download timed out; alternate custom scan used"
+  },
+  "caveats": [
+    "Custom-domain HTML contains only Cloudflare Web Analytics script injection and its adjacent newline; immutable HTML matches exactly.",
+    "No sitemap is present in source/build; all 46 existing public build paths checked on both origins. No gameplay/browser E2E rerun for this backup.",
+    "Infrastructure settings, secrets, browser user data and external services are not backed up.",
+    "No monitoring inventory edits; a metadata-versus-documentation-only main warning may repeat.",
+    "Full historical credential audit not performed; selected source and artifact scanned.",
+    "dist/ contains the exact original static build. functions/ contains recoverable source middleware, not the compiled Cloudflare Pages Functions bundle. Provider-side compiled worker/config not exported."
+  ],
+  "created_utc": "2026-10-21T20:40:34.834744+00:00"
+}
